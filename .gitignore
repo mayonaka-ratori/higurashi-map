@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# maplibreのワーカー（predev/prebuildでnode_modulesから自動コピーされる）
+/public/maplibre-gl-worker.mjs
+/public/maplibre-gl-shared.mjs
