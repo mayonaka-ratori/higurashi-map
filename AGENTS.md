@@ -14,7 +14,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ヒグラシを聞きたい人のための匿名リアルタイム共有マップ。
 詳細は [docs/VISION.md](docs/VISION.md)（理念）、[docs/SPEC.md](docs/SPEC.md)（実装済み仕様）、
-[docs/ROADMAP.md](docs/ROADMAP.md)（今後の計画）、[docs/DESIGN.md](docs/DESIGN.md)（UI再設計ブリーフ）を見ること。
+[docs/ROADMAP.md](docs/ROADMAP.md)（今後の計画）、[docs/DESIGN.md](docs/DESIGN.md)（UI再設計ブリーフ）、
+[docs/design-handoff/](docs/design-handoff/)（確定した地図UIの仕様。未実装）を見ること。
 
 ## 唯一の判断基準
 
