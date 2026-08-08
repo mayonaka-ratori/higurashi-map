@@ -4,6 +4,13 @@
 これ1枚で背景が分かるように書いてある。着手前に [VISION.md](VISION.md) と
 [AGENTS.md](../AGENTS.md) の「落とし穴」も読むこと。
 
+> **このブリーフには回答が出ている。**
+> デザイン側の成果物は [docs/design-handoff/](design-handoff/) にある（案B「探して選ぶ」を採用）。
+> 色・寸法・文言まで確定した仕様と、ブラウザで動く参照実装が入っている。
+> **これから実装する人は、この文書ではなく [design-handoff/README.md](design-handoff/README.md) と
+> [design-handoff/実装手順.md](design-handoff/実装手順.md) を見ること。**
+> こちらは「なぜそう決めたか」を残すための依頼側の記録。
+
 ## 製品の芯（デザインの出発点）
 
 ユーザーが知りたいのはただ一つ——**「今日行けば聞ける？」**。

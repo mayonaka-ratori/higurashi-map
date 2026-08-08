@@ -5,6 +5,7 @@
   "scripts": {
     "copy-map-worker": "node -e \"const fs=require('fs');['maplibre-gl-worker.mjs','maplibre-gl-shared.mjs'].forEach(f=>fs.copyFileSync('node_modules/maplibre-gl/dist/'+f,'public/'+f))\"",
     "validate:places": "node scripts/validate-places.mjs",
+    "design": "node scripts/serve-design.mjs",
     "predev": "npm run copy-map-worker",
     "prebuild": "npm run copy-map-worker",
     "dev": "next dev",

@@ -39,7 +39,21 @@ DM / ランキング / ポイント / バッジ / ゲーミフィケーション
 - Supabase環境変数が無いと自動で「お試しモード」（localStorage保存・サンプル投稿表示）になる
 - ホスティング: Vercel。環境変数 `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-コマンド: `npm run dev`（開発）/ `npm run build`（本番ビルド）/ `npm run validate:places`（スポットデータ検査）
+コマンド: `npm run dev`（開発）/ `npm run build`（本番ビルド）/ `npm run validate:places`（スポットデータ検査）/
+`npm run design`（デザイン参照実装をブラウザで開く）
+
+## 地図UIの再設計（画面に触る前に必ず読む）
+
+地図画面の再設計は **仕様も参照実装も確定していて、まだ実装されていない**。
+`src/components/App.tsx` / `MapView.tsx` / `src/lib/score.ts` に手を入れる前に
+[docs/design-handoff/README.md](docs/design-handoff/README.md)（確定仕様。色・寸法・文言まで数値で入っている）と
+[docs/design-handoff/実装手順.md](docs/design-handoff/実装手順.md)（着手順）を読むこと。
+自分で見た目を考え直さない。数値はそのまま使う。
+
+参照実装は `npm run design` で開ける（`file://` で直接開くと真っ白になる。
+React と Leaflet を CDN から読むのでインターネット接続も要る）。
+参照実装は **Leaflet** で書かれているが、実装先は **MapLibre GL**。
+Leafletのコードを持ち込まないこと（理由と対応表はハンドオフのREADMEにある）。
 
 ## 落とし穴（過去に実際に踏んだもの。壊さないこと）
 

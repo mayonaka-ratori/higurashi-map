@@ -9,7 +9,8 @@
 - [docs/VISION.md](docs/VISION.md) — 何のためのサービスか・作らないもの
 - [docs/SPEC.md](docs/SPEC.md) — 実装済み仕様（期待度の計算式・データモデル）
 - [docs/ROADMAP.md](docs/ROADMAP.md) — 今後の計画
-- [docs/DESIGN.md](docs/DESIGN.md) — UI再設計ブリーフ（PC対応）
+- [docs/DESIGN.md](docs/DESIGN.md) — UI再設計ブリーフ（PC対応。依頼側の記録）
+- [docs/design-handoff/](docs/design-handoff/) — 上のブリーフへの回答。確定した地図UIの仕様と参照実装（未実装）
 - [AGENTS.md](AGENTS.md) — 開発の決まり（AIアシスタント向け。人が読んでも有用）
 
 ## 構成
@@ -30,6 +31,14 @@ npm run dev
 ```
 
 → http://localhost:3000 （接続情報が無ければお試しモードで動く）
+
+デザインの参照実装（[docs/design-handoff/](docs/design-handoff/)）を見るには:
+
+```
+npm run design
+```
+
+→ http://localhost:4321/再設計案.dc.html
 
 ## 公開手順
 

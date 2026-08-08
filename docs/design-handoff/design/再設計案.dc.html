@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+@keyframes higPulse { 0% { transform: scale(.5); opacity: .5 } 100% { transform: scale(2.2); opacity: 0 } }
+.leaflet-tooltip.hig-label { background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:2px 7px; font: 700 12px/1.4 inherit; color:#0f172a; box-shadow:0 1px 5px rgba(15,23,42,.2); white-space:nowrap; }
+.leaflet-tooltip.hig-label::before { display:none; }
+body { margin:0; background:#3f3f46; font-family: Arial, Helvetica, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif; -webkit-font-smoothing:antialiased; }
+a { color:#047857; }
+a:hover { color:#065f46; }
+input { font-family: inherit; }
+::-webkit-scrollbar { width:8px; height:8px; }
+::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:99px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-button { display:none; height:0; width:0; }
+</style>
+</helmet>
+<div style="min-height:100vh;background:#3f3f46;padding:28px 32px 64px;box-sizing:border-box">
+
+  <div style="display:flex;align-items:flex-end;gap:18px;margin-bottom:16px;flex-wrap:wrap">
+    <div style="flex:none">
+      <div style="font-size:11px;letter-spacing:.14em;color:#a1a1aa;margin-bottom:6px">案Bで進行 — 案A・案Cは比較用に残置</div>
+      <div style="font-size:22px;font-weight:700;color:#fafafa;line-height:1.2">{{ layoutTitle }}</div>
+      <div style="margin-top:6px;font-size:13px;color:#a1a1aa;max-width:560px;line-height:1.6">{{ layoutLead }}</div>
+    </div>
+    <div style="display:flex;gap:6px;padding:4px;background:#27272a;border-radius:10px;flex:none">
+      <button onClick="{{ pickA }}" style="{{ tabA }}">案A 今夜はここ</button>
+      <button onClick="{{ pickB }}" style="{{ tabB }}">案B 探して選ぶ</button>
+      <button onClick="{{ pickC }}" style="{{ tabC }}">案C 実況</button>
+    </div>
+    <div style="display:flex;gap:6px;padding:4px;background:#27272a;border-radius:10px;flex:none">
+      <button onClick="{{ showPc }}" style="{{ tabPc }}">PC</button>
+      <button onClick="{{ showSp }}" style="{{ tabSp }}">スマホ</button>
+    </div>
+    <div style="display:flex;gap:6px;padding:4px;background:#27272a;border-radius:10px;flex:none">
+      <button onClick="{{ pickNow }}" style="{{ tabNow }}">今夜のサンプル</button>
+      <button onClick="{{ pickEmpty }}" style="{{ tabEmpty }}">投稿ゼロの日</button>
+    </div>
+  </div>
+
+  <div style="{{ frameStyle }}">
+    <div style="height:28px;background:#e4e4e7;border-bottom:1px solid #d4d4d8;display:flex;align-items:center;padding:0 10px;gap:6px;flex:none">
+      <span style="width:9px;height:9px;border-radius:9999px;background:#f87171"></span>
+      <span style="width:9px;height:9px;border-radius:9999px;background:#fbbf24"></span>
+      <span style="width:9px;height:9px;border-radius:9999px;background:#4ade80"></span>
+      <span style="margin-left:10px;font-size:11px;color:#71717a">ひぐらしのなくところに — 8月7日 18:12 のサンプル</span>
+    </div>
+
+    <div style="position:relative;flex:1;min-height:0;overflow:hidden;background:#eef2f6">
+      <div style="position:absolute;inset:0"><div ref="{{ mapRef }}" style="width:100%;height:100%"></div></div>
+
+      <div style="position:absolute;inset:0;pointer-events:none;z-index:1200">
+
+        <sc-if value="{{ isApc }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ panelA }}">
+            <div style="flex:none;background:#064e3b;color:#ecfdf5;padding:15px 22px 14px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                <h1 style="margin:0;font-size:18px;font-weight:700;letter-spacing:.01em">ひぐらしのなくところに</h1>
+                <span style="font-size:12px;color:#6ee7b7;flex:none">8/7 18:12</span>
+              </div>
+              <p style="margin:4px 0 0;font-size:13px;color:#a7f3d0">今日、カナカナが聞こえる場所。</p>
+            </div>
+
+            <div style="flex:none;padding:14px 22px 13px;background:#f8fafc;border-bottom:1px solid #e2e8f0">
+              <div style="display:flex;align-items:baseline;justify-content:space-between">
+                <span style="font-size:15px;font-weight:700;color:#047857">{{ clock.state }}</span>
+                <span style="font-size:13px;color:#475569">{{ clock.remain }}</span>
+              </div>
+              <div style="position:relative;height:6px;border-radius:3px;background:#e2e8f0;margin:11px 0 8px">
+                <div style="{{ clock.fillStyle }}"></div>
+                <div style="{{ clock.sunStyle }}"></div>
+                <div style="{{ clock.markStyle }}"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b">
+                <span>{{ clock.from }}</span><span>日の入り {{ clock.sunset }}</span><span>{{ clock.to }}</span>
+              </div>
+            </div>
+
+            <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 22px 26px">
+              <sc-if value="{{ noSel }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ heroReady }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:18px;border:1px solid #a7f3d0;background:#ecfdf5;border-radius:14px;padding:18px 18px 16px">
+                  <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
+                    <span style="width:11px;height:11px;border-radius:9999px;background:#059669;box-shadow:0 0 0 4px rgba(5,150,105,.18)"></span>
+                    <span style="font-size:12px;font-weight:700;color:#047857;letter-spacing:.09em">今夜はここ</span>
+                  </div>
+                  <div style="font-size:26px;font-weight:700;color:#0f172a;line-height:1.25">{{ hero.name }}</div>
+                  <div style="margin-top:6px;font-size:13px;color:#475569">{{ hero.city }} ・ {{ hero.dist }}</div>
+                  <div style="margin-top:13px;display:flex;align-items:baseline;gap:9px">
+                    <span style="font-size:19px;color:#f59e0b;letter-spacing:.06em">{{ hero.stars }}</span>
+                    <span style="font-size:12px;color:#64748b">期待度</span>
+                  </div>
+                  <div style="margin-top:5px;font-size:14px;font-weight:700;color:#065f46">{{ hero.reason }}</div>
+                  <sc-if value="{{ hero.hasComment }}" hint-placeholder-val="{{ true }}">
+                    <p style="margin:11px 0 0;padding-left:12px;border-left:2px solid #6ee7b7;font-size:14px;color:#334155;line-height:1.6">{{ hero.comment }}</p>
+                  </sc-if>
+                  <div style="margin-top:12px;font-size:12px;color:#64748b">{{ hero.counts }}</div>
+                  <div style="margin-top:9px;padding-top:9px;border-top:1px solid #bbf7d0;font-size:12px;color:#047857">{{ hero.basis }}</div>
+                  <button onClick="{{ hero.select }}" style="margin-top:15px;width:100%;padding:13px;border-radius:11px;background:#059669;color:#fff;font-size:15px;font-weight:700;border:0;cursor:pointer" style-hover="background:#047857">この場所を地図で見る</button>
+                </div>
+                </sc-if>
+                <sc-if value="{{ heroThin }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:18px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:18px">
+                    <div style="font-size:16px;font-weight:700;color:#1e293b">今日の報告はまだありません</div>
+                    <p style="margin:8px 0 0;font-size:14px;color:#475569;line-height:1.7">日の入りは {{ clock.sunset }}ごろ。前後30分が聞きどきです。下の場所を見て行ってみて、聞こえたらその場で教えてください。</p>
+                  </div>
+                </sc-if>
+
+                <div style="margin-top:26px">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+                    <h2 style="margin:0;font-size:13px;font-weight:700;color:#334155;letter-spacing:.06em">{{ listTitle }}</h2>
+                    <span style="display:flex;gap:12px">
+                      <button onClick="{{ sortCtl.recoPick }}" style="{{ sortCtl.reco }}">おすすめ順</button>
+                      <button onClick="{{ sortCtl.nearPick }}" style="{{ sortCtl.near }}">近い順</button>
+                    </span>
+                  </div>
+                  <ul style="margin:0;padding:0;list-style:none">
+                    <sc-for list="{{ rest }}" as="row" hint-placeholder-count="7">
+                      <li style="border-top:1px solid #f1f5f9">
+                        <button onClick="{{ row.select }}" onMouseEnter="{{ row.enter }}" onMouseLeave="{{ row.leave }}" style="display:flex;width:100%;align-items:center;gap:12px;padding:11px 8px;background:none;border:0;text-align:left;cursor:pointer;border-radius:9px;font:inherit" style-hover="background:#f1f5f9">
+                          <span style="{{ row.dotStyle }}"></span>
+                          <span style="flex:1;min-width:0">
+                            <span style="display:block;font-size:15px;font-weight:600;color:#0f172a;line-height:1.35">{{ row.name }}</span>
+                            <span style="display:block;margin-top:2px;font-size:12px;color:#64748b">{{ row.city }} ・ {{ row.dist }}</span>
+                            <sc-if value="{{ row.isToday }}" hint-placeholder-val="{{ true }}"><span style="display:block;margin-top:3px;font-size:12px;font-weight:700;color:#047857">{{ row.reason }}</span></sc-if>
+                            <sc-if value="{{ row.notToday }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:3px;font-size:12px;color:#64748b">{{ row.reason }}</span></sc-if>
+                          </span>
+                          <span style="flex:none;text-align:right">
+                            <span style="display:block;font-size:14px;color:#f59e0b;letter-spacing:.04em">{{ row.stars }}</span>
+                          </span>
+                        </button>
+                      </li>
+                    </sc-for>
+                  </ul>
+                </div>
+
+                <div style="margin-top:26px">
+                  <h2 style="margin:0 0 4px;font-size:13px;font-weight:700;color:#334155;letter-spacing:.06em">今日の報告</h2>
+                  <sc-if value="{{ noFeed }}" hint-placeholder-val="{{ false }}">
+                    <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.7">まだ一件も届いていません。今日の一件目になれます。</p>
+                  </sc-if>
+                  <ul style="margin:0;padding:0;list-style:none">
+                    <sc-for list="{{ feed }}" as="it" hint-placeholder-count="8">
+                      <li style="border-top:1px solid #f1f5f9">
+                        <button onClick="{{ it.select }}" onMouseEnter="{{ it.enter }}" onMouseLeave="{{ it.leave }}" style="display:flex;gap:11px;width:100%;padding:9px 8px;background:none;border:0;text-align:left;cursor:pointer;border-radius:9px;font:inherit" style-hover="background:#f1f5f9">
+                          <span style="flex:none;width:40px;font-size:12px;color:#64748b;padding-top:2px">{{ it.time }}</span>
+                          <span style="flex:1;min-width:0">
+                            <span style="display:block;font-size:13px;color:#0f172a;line-height:1.4">{{ it.place }}</span>
+                            <sc-if value="{{ it.heard }}" hint-placeholder-val="{{ true }}"><span style="display:inline-block;margin-top:2px;font-size:12px;color:#047857;font-weight:700">🌲 聞こえた</span></sc-if>
+                            <sc-if value="{{ it.quiet }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;margin-top:2px;font-size:12px;color:#64748b">🌙 静かだった</span></sc-if>
+                            <sc-if value="{{ it.hasComment }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:2px;font-size:12px;color:#64748b;line-height:1.5">{{ it.comment }}</span></sc-if>
+                          </span>
+                        </button>
+                      </li>
+                    </sc-for>
+                  </ul>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+                <div style="padding-top:16px">
+                  <button onClick="{{ clearSel }}" style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;background:none;border:0;padding:4px 0;cursor:pointer;font:inherit" style-hover="color:#0f172a">← おすすめ一覧にもどる</button>
+                  <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+                    <span style="{{ sel.dotStyle }}"></span>
+                    <span style="font-size:12px;font-weight:700;color:#475569;letter-spacing:.06em">{{ sel.freshLabel }}</span>
+                  </div>
+                  <h2 style="margin:7px 0 0;font-size:24px;font-weight:700;color:#0f172a;line-height:1.28">{{ sel.name }}</h2>
+                  <p style="margin:6px 0 0;font-size:13px;color:#475569">{{ sel.city }} ・ {{ sel.dist }}</p>
+                  <div style="margin-top:14px;display:flex;align-items:baseline;gap:9px">
+                    <span style="font-size:20px;color:#f59e0b;letter-spacing:.06em">{{ sel.stars }}</span>
+                    <span style="font-size:12px;color:#64748b">期待度</span>
+                  </div>
+                  <p style="margin:5px 0 0;font-size:14px;font-weight:700;color:#065f46">{{ sel.reason }}</p>
+                  <p style="margin:6px 0 0;font-size:12px;color:#64748b">{{ sel.counts }}</p>
+                  <p style="margin:3px 0 0;font-size:12px;color:#64748b">{{ sel.last }}</p>
+
+                  <div style="margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <button style="border-radius:12px;background:#059669;padding:15px 8px;font-size:15px;font-weight:700;color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.12)" style-hover="background:#047857">🌲 カナカナ聞こえた！</button>
+                    <button style="border-radius:12px;background:#475569;padding:15px 8px;font-size:15px;font-weight:700;color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.12)" style-hover="background:#334155">🌙 今日は静かだった</button>
+                  </div>
+                  <div style="margin-top:9px;display:flex;align-items:center;gap:16px">
+                    <button style="font-size:13px;color:#0369a1;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;font:inherit">ひとこと添える（任意）</button>
+                    <a href="#" style="font-size:13px;color:#64748b;text-decoration:underline">𝕏で共有</a>
+                  </div>
+
+                  <sc-if value="{{ sel.hasToday }}" hint-placeholder-val="{{ true }}">
+                    <div style="margin-top:24px">
+                      <h3 style="margin:0 0 4px;font-size:13px;font-weight:700;color:#334155;letter-spacing:.06em">今日の報告</h3>
+                      <ul style="margin:0;padding:0;list-style:none">
+                        <sc-for list="{{ sel.today }}" as="r" hint-placeholder-count="3">
+                          <li style="display:flex;gap:11px;padding:9px 0;border-top:1px solid #f1f5f9">
+                            <span style="flex:none;width:40px;font-size:12px;color:#64748b;padding-top:1px">{{ r.time }}</span>
+                            <span style="flex:1;min-width:0">
+                              <sc-if value="{{ r.heard }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#047857;font-weight:700">🌲 聞こえた</span></sc-if>
+                              <sc-if value="{{ r.quiet }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#64748b">🌙 静かだった</span></sc-if>
+                              <sc-if value="{{ r.hasComment }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:2px;font-size:12px;color:#64748b;line-height:1.5">{{ r.comment }}</span></sc-if>
+                            </span>
+                          </li>
+                        </sc-for>
+                      </ul>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="flex:none;border-top:1px solid #e2e8f0;padding:10px 22px;display:flex;align-items:center;gap:8px;background:#fff">
+              <span style="width:9px;height:9px;border-radius:9999px;background:#0ea5e9;box-shadow:0 0 0 3px rgba(14,165,233,.2)"></span>
+              <span style="font-size:12px;color:#475569">現在地: {{ posLabel }}</span>
+              <span style="margin-left:auto;font-size:12px;color:#64748b">距離はここから</span>
+            </div>
+          </div>
+
+          <div style="{{ chipA }}">
+            <div style="background:rgba(255,255,255,.95);border:1px solid #e2e8f0;border-radius:9999px;padding:8px 15px;font-size:13px;color:#334155;box-shadow:0 2px 8px rgba(15,23,42,.1)">{{ counts.headline }}</div>
+          </div>
+
+          <div style="{{ legendA }}">
+            <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.08em;margin-bottom:9px">ピンの見かた</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="display:flex;align-items:center;gap:10px;font-size:13px;color:#0f172a"><span style="flex:none;width:22px;display:flex;justify-content:center"><span style="width:18px;height:18px;border-radius:9999px;background:#059669;border:2.5px solid #fff;box-shadow:0 0 0 1px rgba(5,150,105,.35),0 0 0 6px rgba(5,150,105,.16)"></span></span>今日 聞こえた</span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:13px;color:#334155"><span style="flex:none;width:22px;display:flex;justify-content:center"><span style="width:14px;height:14px;border-radius:9999px;background:#f59e0b;border:2px solid #fff;box-shadow:0 0 0 1px rgba(245,158,11,.4)"></span></span>3日以内</span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:13px;color:#475569"><span style="flex:none;width:22px;display:flex;justify-content:center"><span style="width:11px;height:11px;border-radius:9999px;background:#fff;border:1.75px solid #64748b"></span></span>今シーズン</span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:13px;color:#64748b"><span style="flex:none;width:22px;display:flex;justify-content:center"><span style="width:8px;height:8px;border-radius:9999px;background:#94a3b8"></span></span>記録なし</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isAsp }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:0;right:0;top:0;pointer-events:auto;background:#064e3b;color:#ecfdf5;padding:12px 16px 11px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+              <h1 style="margin:0;font-size:16px;font-weight:700">ひぐらしのなくところに</h1>
+              <span style="font-size:11px;color:#6ee7b7;flex:none">18:12</span>
+            </div>
+            <p style="margin:3px 0 0;font-size:12px;color:#a7f3d0">今日、カナカナが聞こえる場所。</p>
+          </div>
+          <div style="position:absolute;left:12px;top:78px;pointer-events:auto;background:rgba(255,255,255,.95);border-radius:9999px;padding:6px 12px;font-size:12px;color:#334155;box-shadow:0 2px 8px rgba(15,23,42,.14)">{{ counts.headline }}</div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;pointer-events:auto;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -6px 22px rgba(15,23,42,.18);max-height:56%;display:flex;flex-direction:column">
+            <div style="flex:none;display:flex;justify-content:center;padding:8px 0 2px"><span style="width:38px;height:4px;border-radius:99px;background:#cbd5e1"></span></div>
+            <div style="flex:none;display:flex;align-items:baseline;justify-content:space-between;padding:6px 16px 10px;border-bottom:1px solid #f1f5f9">
+              <span style="font-size:14px;font-weight:700;color:#047857">{{ clock.state }}</span>
+              <span style="font-size:12px;color:#64748b">日の入り {{ clock.sunset }} ・ {{ clock.remain }}</span>
+            </div>
+            <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:14px 16px 22px">
+              <div style="border:1px solid #a7f3d0;background:#ecfdf5;border-radius:14px;padding:15px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                  <span style="width:9px;height:9px;border-radius:9999px;background:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.18)"></span>
+                  <span style="font-size:11px;font-weight:700;color:#047857;letter-spacing:.09em">今夜はここ</span>
+                </div>
+                <div style="font-size:20px;font-weight:700;color:#0f172a;line-height:1.3">{{ hero.name }}</div>
+                <div style="margin-top:4px;font-size:12px;color:#475569">{{ hero.city }} ・ {{ hero.dist }}</div>
+                <div style="margin-top:9px;display:flex;align-items:baseline;gap:9px">
+                  <span style="font-size:16px;color:#f59e0b;letter-spacing:.05em">{{ hero.stars }}</span>
+                  <span style="font-size:13px;font-weight:700;color:#065f46">{{ hero.agoHeard }}</span>
+                </div>
+                <button onClick="{{ hero.select }}" style="margin-top:12px;width:100%;padding:14px;border-radius:11px;background:#059669;color:#fff;font-size:15px;font-weight:700;border:0;cursor:pointer">この場所を地図で見る</button>
+              </div>
+              <h2 style="margin:20px 0 2px;font-size:12px;font-weight:700;color:#334155;letter-spacing:.06em">ほかに期待できる場所</h2>
+              <ul style="margin:0;padding:0;list-style:none">
+                <sc-for list="{{ restSp }}" as="row" hint-placeholder-count="4">
+                  <li style="border-top:1px solid #f1f5f9">
+                    <button onClick="{{ row.select }}" style="display:flex;width:100%;align-items:center;gap:10px;padding:12px 2px;background:none;border:0;text-align:left;cursor:pointer;font:inherit">
+                      <span style="{{ row.dotStyle }}"></span>
+                      <span style="flex:1;min-width:0">
+                        <span style="display:block;font-size:14px;font-weight:600;color:#0f172a">{{ row.name }}</span>
+                        <span style="display:block;margin-top:1px;font-size:11px;color:#64748b">{{ row.city }} ・ {{ row.dist }}</span>
+                        <span style="display:block;margin-top:2px;font-size:11px;color:#047857;font-weight:700">{{ row.reason }}</span>
+                      </span>
+                      <span style="flex:none;text-align:right">
+                        <span style="display:block;font-size:13px;color:#f59e0b">{{ row.stars }}</span>
+                      </span>
+                    </button>
+                  </li>
+                </sc-for>
+              </ul>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isBpc }}" hint-placeholder-val="{{ false }}">
+          <div style="{{ panelB }}">
+            <div style="flex:none;background:#064e3b;color:#ecfdf5;padding:13px 20px 12px">
+              <h1 style="margin:0;font-size:17px;font-weight:700">ひぐらしのなくところに</h1>
+              <p style="margin:3px 0 0;font-size:12px;color:#a7f3d0">今日、カナカナが聞こえる場所。</p>
+            </div>
+
+            <div style="flex:none;padding:12px 16px 0">
+              <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="地点名で探す（例: 見沼、高尾）" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;color:#0f172a;outline:none;background:#f8fafc" style-focus="border-color:#059669;background:#fff">
+              <div style="display:flex;gap:6px;margin:10px 0 0;flex-wrap:wrap">
+                <button onClick="{{ chips.allPick }}" style="{{ chips.all }}">すべて {{ chips.nAll }}</button>
+                <button onClick="{{ chips.todayPick }}" style="{{ chips.today }}">🟢 今日 {{ chips.nToday }}</button>
+                <button onClick="{{ chips.recentPick }}" style="{{ chips.recent }}">🟡 3日内 {{ chips.nRecent }}</button>
+                <button onClick="{{ chips.seasonPick }}" style="{{ chips.season }}">今季 {{ chips.nSeason }}</button>
+              </div>
+            </div>
+
+            <div style="flex:none;display:flex;gap:20px;padding:12px 20px 0;border-bottom:1px solid #e2e8f0">
+              <button onClick="{{ tabs.listPick }}" style="{{ tabs.list }}">一覧</button>
+              <button onClick="{{ tabs.feedPick }}" style="{{ tabs.feed }}">今日の報告</button>
+              <span style="margin-left:auto;align-self:center;padding-bottom:10px;font-size:12px;color:#64748b">{{ clock.state }} · {{ clock.remain }}</span>
+            </div>
+
+            <sc-if value="{{ bShowList }}" hint-placeholder-val="{{ true }}">
+            <sc-if value="{{ heroReady }}" hint-placeholder-val="{{ true }}">
+              <div style="flex:none;margin:12px 16px 0;border:1px solid #a7f3d0;background:#ecfdf5;border-radius:12px;padding:14px 16px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                  <span style="width:9px;height:9px;border-radius:9999px;background:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.18)"></span>
+                  <span style="font-size:11px;font-weight:700;color:#047857;letter-spacing:.09em">今夜はここ</span>
+                  <span style="margin-left:auto;font-size:15px;color:#f59e0b;letter-spacing:.05em">{{ hero.stars }}</span>
+                </div>
+                <button onClick="{{ hero.select }}" style="display:block;width:100%;text-align:left;background:none;border:0;padding:0;cursor:pointer;font:inherit">
+                  <span style="display:block;font-size:19px;font-weight:700;color:#0f172a;line-height:1.3">{{ hero.name }}</span>
+                  <span style="display:block;margin-top:3px;font-size:12px;color:#475569">{{ hero.city }} ・ {{ hero.dist }}</span>
+                  <span style="display:block;margin-top:6px;font-size:13px;font-weight:700;color:#065f46">{{ hero.reason }}</span>
+                </button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ heroThin }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:none;margin:12px 16px 0;border:1px solid #e2e8f0;background:#f8fafc;border-radius:12px;padding:13px 16px">
+                <div style="font-size:13px;font-weight:700;color:#334155">今日の報告はまだありません</div>
+                <p style="margin:5px 0 0;font-size:12px;color:#475569;line-height:1.6">行って聞こえたら、その場で教えてください。日の入り前後30分が聞きどきです。</p>
+              </div>
+            </sc-if>
+
+            <div style="flex:none;display:flex;align-items:baseline;justify-content:space-between;padding:10px 20px 8px;background:#f8fafc;border-bottom:1px solid #f1f5f9">
+                <span style="font-size:13px;font-weight:700;color:#334155">{{ bCount }}</span>
+                <span style="display:flex;gap:12px">
+                  <button onClick="{{ sortCtl.recoPick }}" style="{{ sortCtl.reco }}">おすすめ順</button>
+                  <button onClick="{{ sortCtl.nearPick }}" style="{{ sortCtl.near }}">近い順</button>
+                </span>
+              </div>
+              <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 12px 20px">
+                <ul style="margin:0;padding:0;list-style:none">
+                  <sc-for list="{{ bList }}" as="row" hint-placeholder-count="9">
+                    <li>
+                      <button onClick="{{ row.select }}" onMouseEnter="{{ row.enter }}" onMouseLeave="{{ row.leave }}" style="display:flex;width:100%;align-items:center;gap:12px;padding:11px 8px;background:none;border:0;border-bottom:1px solid #f1f5f9;text-align:left;cursor:pointer;font:inherit" style-hover="background:#f1f5f9">
+                        <span style="{{ row.dotStyle }}"></span>
+                        <span style="flex:1;min-width:0">
+                          <span style="display:block;font-size:15px;font-weight:600;color:#0f172a;line-height:1.35">{{ row.name }}</span>
+                          <span style="display:block;margin-top:2px;font-size:12px;color:#64748b">{{ row.city }} ・ {{ row.dist }}</span>
+                          <sc-if value="{{ row.isToday }}" hint-placeholder-val="{{ true }}"><span style="display:block;margin-top:3px;font-size:12px;font-weight:700;color:#047857">{{ row.reason }}</span></sc-if>
+                          <sc-if value="{{ row.notToday }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:3px;font-size:12px;color:#64748b">{{ row.reason }}</span></sc-if>
+                        </span>
+                        <span style="flex:none;text-align:right">
+                          <span style="display:block;font-size:14px;color:#f59e0b;letter-spacing:.04em">{{ row.stars }}</span>
+                        </span>
+                      </button>
+                    </li>
+                  </sc-for>
+                </ul>
+                <sc-if value="{{ bEmpty }}" hint-placeholder-val="{{ false }}">
+                  <p style="margin:26px 8px;font-size:13px;color:#64748b;line-height:1.7">条件に合う場所がありません。地図を動かすか、絞り込みを「すべて」にもどしてください。</p>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ bShowFeed }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px 20px 20px">
+                <ul style="margin:0;padding:0;list-style:none">
+                  <sc-for list="{{ feed }}" as="it" hint-placeholder-count="10">
+                    <li style="border-bottom:1px solid #f1f5f9">
+                      <button onClick="{{ it.select }}" onMouseEnter="{{ it.enter }}" onMouseLeave="{{ it.leave }}" style="display:flex;gap:12px;width:100%;padding:10px 6px;background:none;border:0;text-align:left;cursor:pointer;font:inherit" style-hover="background:#f8fafc">
+                        <span style="flex:none;width:42px;font-size:13px;color:#64748b;padding-top:1px">{{ it.time }}</span>
+                        <span style="flex:1;min-width:0">
+                          <span style="display:block;font-size:14px;color:#0f172a;line-height:1.4">{{ it.place }}</span>
+                          <sc-if value="{{ it.heard }}" hint-placeholder-val="{{ true }}"><span style="display:inline-block;margin-top:2px;font-size:12px;color:#047857;font-weight:700">🌲 聞こえた</span></sc-if>
+                          <sc-if value="{{ it.quiet }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;margin-top:2px;font-size:12px;color:#64748b">🌙 静かだった</span></sc-if>
+                          <sc-if value="{{ it.hasComment }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:2px;font-size:12px;color:#64748b;line-height:1.5">{{ it.comment }}</span></sc-if>
+                        </span>
+                      </button>
+                    </li>
+                  </sc-for>
+                </ul>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:#fff;display:flex;flex-direction:column">
+                <div style="flex:none;background:#064e3b;color:#ecfdf5;padding:11px 20px;display:flex;align-items:center;gap:10px">
+                  <button onClick="{{ clearSel }}" style="background:none;border:0;color:#a7f3d0;font-size:14px;cursor:pointer;padding:2px 0;font:inherit" style-hover="color:#fff">← 一覧</button>
+                  <span style="margin-left:auto;font-size:12px;color:#6ee7b7">{{ clock.state }}</span>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:18px 20px 22px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="{{ sel.dotStyle }}"></span>
+                    <span style="font-size:12px;font-weight:700;color:#475569;letter-spacing:.06em">{{ sel.freshLabel }}</span>
+                  </div>
+                  <h2 style="margin:8px 0 0;font-size:23px;font-weight:700;color:#0f172a;line-height:1.28">{{ sel.name }}</h2>
+                  <p style="margin:6px 0 0;font-size:13px;color:#475569">{{ sel.city }} ・ {{ sel.dist }}</p>
+                  <div style="margin-top:14px;display:flex;align-items:baseline;gap:9px">
+                    <span style="font-size:20px;color:#f59e0b;letter-spacing:.06em">{{ sel.stars }}</span>
+                    <span style="font-size:12px;color:#64748b">期待度</span>
+                  </div>
+                  <p style="margin:5px 0 0;font-size:14px;font-weight:700;color:#065f46">{{ sel.reason }}</p>
+                  <p style="margin:6px 0 0;font-size:12px;color:#64748b">{{ sel.counts }}</p>
+                  <sc-if value="{{ sel.hasToday }}" hint-placeholder-val="{{ true }}">
+                    <div style="margin-top:22px">
+                      <h3 style="margin:0 0 4px;font-size:13px;font-weight:700;color:#334155;letter-spacing:.06em">今日の報告</h3>
+                      <ul style="margin:0;padding:0;list-style:none">
+                        <sc-for list="{{ sel.today }}" as="r" hint-placeholder-count="3">
+                          <li style="display:flex;gap:11px;padding:9px 0;border-top:1px solid #f1f5f9">
+                            <span style="flex:none;width:40px;font-size:12px;color:#64748b;padding-top:1px">{{ r.time }}</span>
+                            <span style="flex:1;min-width:0">
+                              <sc-if value="{{ r.heard }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#047857;font-weight:700">🌲 聞こえた</span></sc-if>
+                              <sc-if value="{{ r.quiet }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#64748b">🌙 静かだった</span></sc-if>
+                              <sc-if value="{{ r.hasComment }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:2px;font-size:12px;color:#64748b;line-height:1.5">{{ r.comment }}</span></sc-if>
+                            </span>
+                          </li>
+                        </sc-for>
+                      </ul>
+                    </div>
+                  </sc-if>
+                  <a href="#" style="display:inline-block;margin-top:20px;font-size:13px;color:#64748b;text-decoration:underline">この場所を𝕏で共有</a>
+                </div>
+                <div style="flex:none;border-top:1px solid #e2e8f0;padding:14px 20px;background:#f8fafc">
+                  <sc-if value="{{ postDone }}" hint-placeholder-val="{{ false }}">
+                    <div style="border-radius:12px;background:#ecfdf5;border:1px solid #a7f3d0;padding:15px">
+                      <div style="font-size:15px;font-weight:700;color:#065f46">カナカナ情報を受け取りました。</div>
+                      <p style="margin:6px 0 0;font-size:13px;color:#047857;line-height:1.6">今日ヒグラシを探している誰かの助けになります。</p>
+                      <div style="margin-top:12px;display:flex;gap:10px">
+                        <sc-if value="{{ postHeard }}" hint-placeholder-val="{{ true }}">
+                          <a href="#" style="flex:1;text-align:center;border-radius:11px;background:#0f172a;color:#fff;padding:12px 8px;font-size:13px;font-weight:700;text-decoration:none">𝕏 でシェアする</a>
+                        </sc-if>
+                        <button onClick="{{ closeDone }}" style="flex:1;border-radius:11px;background:#fff;border:1px solid #cbd5e1;color:#334155;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;font:inherit">閉じる</button>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ postNotDone }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                      <button onClick="{{ postHeardBtn }}" style="border-radius:12px;background:#059669;padding:15px 8px;font-size:15px;font-weight:700;color:#fff;border:0;cursor:pointer" style-hover="background:#047857">🌲 カナカナ聞こえた！</button>
+                      <button onClick="{{ postQuietBtn }}" style="border-radius:12px;background:#475569;padding:15px 8px;font-size:15px;font-weight:700;color:#fff;border:0;cursor:pointer" style-hover="background:#334155">🌙 今日は静かだった</button>
+                    </div>
+                    <sc-if value="{{ postSending }}" hint-placeholder-val="{{ false }}">
+                      <p style="margin:9px 0 0;font-size:13px;color:#475569">送信中…</p>
+                    </sc-if>
+                    <sc-if value="{{ postIdle }}" hint-placeholder-val="{{ true }}">
+                      <button style="margin-top:9px;font-size:13px;color:#0369a1;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;font:inherit">ひとこと添える（任意）</button>
+                    </sc-if>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="{{ legendB }}">
+            <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#0f172a"><span style="width:16px;height:16px;border-radius:9999px;background:#059669;border:2.5px solid #fff;box-shadow:0 0 0 1px rgba(5,150,105,.35)"></span>今日</span>
+            <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#334155"><span style="width:13px;height:13px;border-radius:9999px;background:#f59e0b;border:2px solid #fff;box-shadow:0 0 0 1px rgba(245,158,11,.4)"></span>3日内</span>
+            <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569"><span style="width:11px;height:11px;border-radius:9999px;background:#fff;border:1.75px solid #64748b"></span>今季</span>
+            <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#64748b"><span style="width:8px;height:8px;border-radius:9999px;background:#94a3b8"></span>記録なし</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isBsp }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:0;right:0;top:0;pointer-events:auto;background:#064e3b;color:#ecfdf5;padding:11px 14px 10px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+              <h1 style="margin:0;font-size:15px;font-weight:700">ひぐらしのなくところに</h1>
+              <span style="font-size:11px;color:#6ee7b7;flex:none">{{ clock.state }}</span>
+            </div>
+            <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="地点名で探す" style="margin-top:9px;width:100%;box-sizing:border-box;padding:11px 13px;border:0;border-radius:10px;font-size:16px;color:#0f172a;outline:none;background:#fff">
+            <div style="display:flex;gap:6px;margin-top:9px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none">
+              <button onClick="{{ chips.allPick }}" style="{{ chips.allSp }}">すべて {{ chips.nAll }}</button>
+              <button onClick="{{ chips.todayPick }}" style="{{ chips.todaySp }}">🟢 今日 {{ chips.nToday }}</button>
+              <button onClick="{{ chips.recentPick }}" style="{{ chips.recentSp }}">🟡 3日内 {{ chips.nRecent }}</button>
+              <button onClick="{{ chips.seasonPick }}" style="{{ chips.seasonSp }}">今季 {{ chips.nSeason }}</button>
+            </div>
+          </div>
+
+          <div style="{{ sheetStyle }}">
+            <div style="flex:none;display:flex;justify-content:center;padding:8px 0 4px"><span style="width:38px;height:4px;border-radius:99px;background:#cbd5e1"></span></div>
+            <sc-if value="{{ sheetCards }}" hint-placeholder-val="{{ true }}">
+              <div style="flex:none;display:flex;align-items:baseline;justify-content:space-between;padding:2px 16px 8px">
+                <span style="font-size:13px;font-weight:700;color:#0f172a">{{ cardsTitle }}</span>
+                <button onClick="{{ openList }}" style="background:none;border:0;padding:0;cursor:pointer;font:inherit;font-size:12px;font-weight:700;color:#064e3b;text-decoration:underline;text-underline-offset:3px">一覧を見る {{ bCountShort }}</button>
+              </div>
+              <div style="flex:none;display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;padding:0 12px 14px;scrollbar-width:none">
+                <sc-for list="{{ spCardList }}" as="c" hint-placeholder-count="5">
+                  <button onClick="{{ c.select }}" style="flex:none;width:224px;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;cursor:pointer;font:inherit">
+                    <span style="display:flex;align-items:center;gap:8px">
+                      <span style="{{ c.dotStyle }}"></span>
+                      <sc-if value="{{ c.isToday }}" hint-placeholder-val="{{ true }}"><span style="font-size:12px;font-weight:700;color:#047857">{{ c.agoLabel }}</span></sc-if>
+                      <sc-if value="{{ c.notToday }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#64748b">{{ c.agoLabel }}</span></sc-if>
+                      <span style="margin-left:auto;font-size:13px;color:#f59e0b">{{ c.stars }}</span>
+                    </span>
+                    <span style="display:block;margin-top:7px;font-size:16px;font-weight:700;color:#0f172a;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</span>
+                    <span style="display:block;margin-top:3px;font-size:12px;color:#64748b">{{ c.city }} ・ {{ c.dist }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ sheetList }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:none;display:flex;align-items:center;gap:18px;padding:2px 16px 0;border-bottom:1px solid #f1f5f9">
+                <button onClick="{{ tabs.listPick }}" style="{{ tabs.list }}">一覧</button>
+                <button onClick="{{ tabs.feedPick }}" style="{{ tabs.feed }}">今日の報告</button>
+                <button onClick="{{ openCards }}" style="margin-left:auto;padding-bottom:10px;background:none;border:0;cursor:pointer;font:inherit;font-size:12px;color:#064e3b;text-decoration:underline;text-underline-offset:3px">地図を広く</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ bShowList }}" hint-placeholder-val="{{ true }}">
+            <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 16px 20px">
+              <ul style="margin:0;padding:0;list-style:none">
+                <sc-for list="{{ bList }}" as="row" hint-placeholder-count="6">
+                  <li style="border-bottom:1px solid #f1f5f9">
+                    <button onClick="{{ row.select }}" style="display:flex;width:100%;align-items:center;gap:10px;padding:12px 2px;background:none;border:0;text-align:left;cursor:pointer;font:inherit">
+                      <span style="{{ row.dotStyle }}"></span>
+                      <span style="flex:1;min-width:0">
+                        <span style="display:block;font-size:14px;font-weight:600;color:#0f172a">{{ row.name }}</span>
+                        <span style="display:block;margin-top:1px;font-size:11px;color:#64748b">{{ row.city }} ・ {{ row.dist }}</span>
+                        <span style="display:block;margin-top:2px;font-size:11px;color:#64748b">{{ row.reason }}</span>
+                      </span>
+                      <span style="flex:none;text-align:right">
+                        <span style="display:block;font-size:13px;color:#f59e0b">{{ row.stars }}</span>
+                      </span>
+                    </button>
+                  </li>
+                </sc-for>
+              </ul>
+            </div>
+            </sc-if>
+            <sc-if value="{{ bShowFeed }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:2px 16px 20px">
+                <ul style="margin:0;padding:0;list-style:none">
+                  <sc-for list="{{ feed }}" as="it" hint-placeholder-count="8">
+                    <li style="border-bottom:1px solid #f1f5f9">
+                      <button onClick="{{ it.select }}" style="display:flex;gap:11px;width:100%;padding:11px 2px;background:none;border:0;text-align:left;cursor:pointer;font:inherit">
+                        <span style="flex:none;width:40px;font-size:12px;color:#64748b;padding-top:1px">{{ it.time }}</span>
+                        <span style="flex:1;min-width:0">
+                          <span style="display:block;font-size:14px;color:#0f172a;line-height:1.4">{{ it.place }}</span>
+                          <sc-if value="{{ it.heard }}" hint-placeholder-val="{{ true }}"><span style="display:inline-block;margin-top:2px;font-size:12px;color:#047857;font-weight:700">🌲 聞こえた</span></sc-if>
+                          <sc-if value="{{ it.quiet }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;margin-top:2px;font-size:12px;color:#64748b">🌙 静かだった</span></sc-if>
+                          <sc-if value="{{ it.hasComment }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:2px;font-size:12px;color:#64748b;line-height:1.5">{{ it.comment }}</span></sc-if>
+                        </span>
+                      </button>
+                    </li>
+                  </sc-for>
+                </ul>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ spDetail }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:0;right:0;bottom:0;top:0;pointer-events:auto;display:flex;flex-direction:column;justify-content:flex-end">
+            <button onClick="{{ clearSel }}" aria-label="閉じる" style="flex:1;background:rgba(15,23,42,.18);border:0;cursor:pointer"></button>
+            <div style="flex:none;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -8px 26px rgba(15,23,42,.24);max-height:64%;display:flex;flex-direction:column">
+              <div style="flex:none;display:flex;justify-content:center;padding:9px 0 3px"><span style="width:38px;height:4px;border-radius:99px;background:#cbd5e1"></span></div>
+              <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px 18px 18px">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <span style="{{ sel.dotStyle }}"></span>
+                  <span style="font-size:12px;font-weight:700;color:#475569;letter-spacing:.05em">{{ sel.freshLabel }}</span>
+                  <button onClick="{{ clearSel }}" aria-label="閉じる" style="margin-left:auto;margin-right:-8px;background:none;border:0;font-size:17px;line-height:1;color:#64748b;cursor:pointer;padding:10px 12px">✕</button>
+                </div>
+                <h2 style="margin:6px 0 0;font-size:22px;font-weight:700;color:#0f172a;line-height:1.3">{{ sel.name }}</h2>
+                <p style="margin:5px 0 0;font-size:13px;color:#475569">{{ sel.city }} ・ {{ sel.dist }}</p>
+                <div style="margin-top:12px;display:flex;align-items:baseline;gap:9px">
+                  <span style="font-size:19px;color:#f59e0b;letter-spacing:.06em">{{ sel.stars }}</span>
+                  <span style="font-size:12px;color:#64748b">期待度</span>
+                </div>
+                <p style="margin:5px 0 0;font-size:14px;font-weight:700;color:#065f46">{{ sel.reason }}</p>
+                <p style="margin:6px 0 0;font-size:12px;color:#64748b">{{ sel.counts }}</p>
+                <sc-if value="{{ sel.hasToday }}" hint-placeholder-val="{{ true }}">
+                  <div style="margin-top:18px">
+                    <h3 style="margin:0 0 3px;font-size:12px;font-weight:700;color:#475569;letter-spacing:.05em">今日の報告</h3>
+                    <ul style="margin:0;padding:0;list-style:none">
+                      <sc-for list="{{ sel.today }}" as="r" hint-placeholder-count="3">
+                        <li style="display:flex;gap:11px;padding:9px 0;border-top:1px solid #f1f5f9">
+                          <span style="flex:none;width:40px;font-size:12px;color:#64748b;padding-top:1px">{{ r.time }}</span>
+                          <span style="flex:1;min-width:0">
+                            <sc-if value="{{ r.heard }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#047857;font-weight:700">🌲 聞こえた</span></sc-if>
+                            <sc-if value="{{ r.quiet }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#64748b">🌙 静かだった</span></sc-if>
+                            <sc-if value="{{ r.hasComment }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:2px;font-size:12px;color:#64748b;line-height:1.5">{{ r.comment }}</span></sc-if>
+                          </span>
+                        </li>
+                      </sc-for>
+                    </ul>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="flex:none;border-top:1px solid #e2e8f0;background:#f8fafc;padding:14px 18px 22px">
+                <sc-if value="{{ postDone }}" hint-placeholder-val="{{ false }}">
+                  <div style="border-radius:14px;background:#ecfdf5;border:1px solid #a7f3d0;padding:16px">
+                    <div style="font-size:16px;font-weight:700;color:#065f46">カナカナ情報を受け取りました。</div>
+                    <p style="margin:6px 0 0;font-size:13px;color:#047857;line-height:1.6">今日ヒグラシを探している誰かの助けになります。</p>
+                    <div style="margin-top:13px;display:flex;gap:10px">
+                      <sc-if value="{{ postHeard }}" hint-placeholder-val="{{ true }}">
+                        <a href="#" style="flex:1;text-align:center;border-radius:12px;background:#0f172a;color:#fff;padding:14px 8px;font-size:14px;font-weight:700;text-decoration:none">𝕏 でシェアする</a>
+                      </sc-if>
+                      <button onClick="{{ closeDone }}" style="flex:1;border-radius:12px;background:#fff;border:1px solid #cbd5e1;color:#334155;padding:14px 8px;font-size:14px;font-weight:700;cursor:pointer;font:inherit">閉じる</button>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ postNotDone }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <button onClick="{{ postHeardBtn }}" style="border-radius:14px;background:#059669;padding:17px 6px;font-size:14px;font-weight:700;color:#fff;border:0;cursor:pointer;line-height:1.35">🌲 カナカナ聞こえた！</button>
+                    <button onClick="{{ postQuietBtn }}" style="border-radius:14px;background:#475569;padding:17px 6px;font-size:14px;font-weight:700;color:#fff;border:0;cursor:pointer;line-height:1.35">🌙 今日は静かだった</button>
+                  </div>
+                  <sc-if value="{{ postSending }}" hint-placeholder-val="{{ false }}">
+                    <p style="margin:9px 0 0;font-size:13px;color:#475569">送信中…</p>
+                  </sc-if>
+                  <sc-if value="{{ postIdle }}" hint-placeholder-val="{{ true }}">
+                    <button style="margin-top:11px;font-size:13px;color:#0369a1;background:none;border:0;padding:4px 0;cursor:pointer;text-decoration:underline;font:inherit">ひとこと添える（任意）</button>
+                  </sc-if>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isCpc }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:20px;top:18px;pointer-events:auto;display:flex;flex-direction:column;gap:10px;width:340px">
+            <div style="background:#064e3b;color:#ecfdf5;border-radius:12px;padding:12px 16px;box-shadow:0 4px 16px rgba(15,23,42,.28)">
+              <h1 style="margin:0;font-size:16px;font-weight:700">ひぐらしのなくところに</h1>
+              <p style="margin:3px 0 0;font-size:12px;color:#a7f3d0">今日、カナカナが聞こえる場所。</p>
+            </div>
+            <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="地点名で探す（例: 見沼、高尾）" style="width:100%;box-sizing:border-box;padding:12px 15px;border:1px solid rgba(255,255,255,.6);border-radius:11px;font-size:14px;color:#0f172a;outline:none;background:rgba(255,255,255,.97);box-shadow:0 3px 14px rgba(15,23,42,.16)" style-focus="border-color:#059669">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button onClick="{{ chips.allPick }}" style="{{ chips.allFloat }}">すべて {{ chips.nAll }}</button>
+              <button onClick="{{ chips.todayPick }}" style="{{ chips.todayFloat }}">🟢 今日 {{ chips.nToday }}</button>
+              <button onClick="{{ chips.recentPick }}" style="{{ chips.recentFloat }}">🟡 3日内 {{ chips.nRecent }}</button>
+            </div>
+          </div>
+
+          <div style="position:absolute;right:74px;top:18px;pointer-events:auto;width:250px;background:rgba(255,255,255,.97);border-radius:12px;padding:14px 16px;box-shadow:0 4px 16px rgba(15,23,42,.2)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <span style="font-size:15px;font-weight:700;color:#047857">{{ clock.state }}</span>
+              <span style="font-size:13px;color:#64748b">{{ clock.now }}</span>
+            </div>
+            <div style="position:relative;height:6px;border-radius:3px;background:#e2e8f0;margin:11px 0 8px">
+              <div style="{{ clock.fillStyle }}"></div>
+              <div style="{{ clock.sunStyle }}"></div>
+              <div style="{{ clock.markStyle }}"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b">
+              <span>{{ clock.from }}</span><span>日の入り {{ clock.sunset }}</span><span>{{ clock.to }}</span>
+            </div>
+            <p style="margin:9px 0 0;font-size:12px;color:#475569;line-height:1.5">{{ clock.remain }}</p>
+          </div>
+
+          <sc-if value="{{ noSel }}" hint-placeholder-val="{{ true }}">
+            <div style="position:absolute;left:20px;bottom:20px;pointer-events:auto;width:340px;max-height:330px;background:rgba(255,255,255,.97);border-radius:12px;box-shadow:0 5px 20px rgba(15,23,42,.22);display:flex;flex-direction:column;overflow:hidden">
+              <div style="flex:none;display:flex;align-items:center;gap:9px;padding:12px 16px 10px;border-bottom:1px solid #f1f5f9">
+                <span style="width:8px;height:8px;border-radius:9999px;background:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.2)"></span>
+                <span style="font-size:13px;font-weight:700;color:#0f172a">今日の報告</span>
+                <span style="margin-left:auto;font-size:12px;color:#64748b">{{ counts.feedNote }}</span>
+              </div>
+              <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 8px 8px">
+                <sc-if value="{{ noFeed }}" hint-placeholder-val="{{ false }}">
+                  <p style="margin:14px 10px;font-size:13px;color:#64748b;line-height:1.7">今日はまだ一件も届いていません。日の入り {{ clock.sunset }}の前後30分が聞きどきです。</p>
+                </sc-if>
+                <ul style="margin:0;padding:0;list-style:none">
+                  <sc-for list="{{ feed }}" as="it" hint-placeholder-count="8">
+                    <li style="border-bottom:1px solid #f8fafc">
+                      <button onClick="{{ it.select }}" onMouseEnter="{{ it.enter }}" onMouseLeave="{{ it.leave }}" style="display:flex;gap:10px;width:100%;padding:9px 8px;background:none;border:0;text-align:left;cursor:pointer;border-radius:8px;font:inherit" style-hover="background:#f1f5f9">
+                        <span style="flex:none;width:38px;font-size:12px;color:#64748b;padding-top:1px">{{ it.time }}</span>
+                        <span style="flex:1;min-width:0">
+                          <span style="display:block;font-size:13px;color:#0f172a;line-height:1.4">{{ it.place }}</span>
+                          <sc-if value="{{ it.heard }}" hint-placeholder-val="{{ true }}"><span style="display:inline-block;margin-top:1px;font-size:12px;color:#047857;font-weight:700">🌲 聞こえた</span></sc-if>
+                          <sc-if value="{{ it.quiet }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;margin-top:1px;font-size:12px;color:#64748b">🌙 静かだった</span></sc-if>
+                        </span>
+                      </button>
+                    </li>
+                  </sc-for>
+                </ul>
+              </div>
+            </div>
+
+            <div style="position:absolute;left:380px;right:20px;bottom:20px;pointer-events:auto">
+              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:9px;padding-left:2px">
+                <span style="font-size:13px;font-weight:700;color:#0f172a;background:rgba(255,255,255,.94);border-radius:9999px;padding:5px 12px;box-shadow:0 2px 8px rgba(15,23,42,.14)">{{ cardsTitle }}</span>
+              </div>
+              <div style="display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 8px">
+                <sc-for list="{{ spCardList }}" as="c" hint-placeholder-count="6">
+                  <button onClick="{{ c.select }}" onMouseEnter="{{ c.enter }}" onMouseLeave="{{ c.leave }}" style="flex:none;width:236px;text-align:left;background:rgba(255,255,255,.97);border:1px solid #e2e8f0;border-radius:12px;padding:13px 15px;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.16);font:inherit" style-hover="border-color:#6ee7b7">
+                    <span style="display:flex;align-items:center;gap:8px">
+                      <span style="{{ c.dotStyle }}"></span>
+                      <sc-if value="{{ c.isToday }}" hint-placeholder-val="{{ true }}"><span style="font-size:12px;font-weight:700;color:#047857">{{ c.agoLabel }}</span></sc-if>
+                      <sc-if value="{{ c.notToday }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#64748b">{{ c.agoLabel }}</span></sc-if>
+                      <span style="margin-left:auto;font-size:13px;color:#f59e0b;letter-spacing:.03em">{{ c.stars }}</span>
+                    </span>
+                    <span style="display:block;margin-top:7px;font-size:16px;font-weight:700;color:#0f172a;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</span>
+                    <span style="display:block;margin-top:3px;font-size:12px;color:#64748b">{{ c.city }} ・ {{ c.dist }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;left:20px;bottom:20px;pointer-events:auto;width:428px;background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(15,23,42,.3);overflow:hidden">
+              <div style="padding:18px 20px 16px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="{{ sel.dotStyle }}"></span>
+                  <span style="font-size:12px;font-weight:700;color:#475569;letter-spacing:.06em">{{ sel.freshLabel }}</span>
+                  <button onClick="{{ clearSel }}" aria-label="閉じる" style="margin-left:auto;background:none;border:0;font-size:17px;line-height:1;color:#64748b;cursor:pointer;padding:2px 4px" style-hover="color:#334155">✕</button>
+                </div>
+                <h2 style="margin:8px 0 0;font-size:24px;font-weight:700;color:#0f172a;line-height:1.28">{{ sel.name }}</h2>
+                <p style="margin:6px 0 0;font-size:13px;color:#475569">{{ sel.city }} ・ {{ sel.dist }}</p>
+                <div style="margin-top:13px;display:flex;align-items:baseline;gap:9px">
+                  <span style="font-size:20px;color:#f59e0b;letter-spacing:.06em">{{ sel.stars }}</span>
+                  <span style="font-size:12px;color:#64748b">期待度</span>
+                </div>
+                <p style="margin:5px 0 0;font-size:14px;font-weight:700;color:#065f46">{{ sel.reason }}</p>
+                <p style="margin:5px 0 0;font-size:12px;color:#64748b">{{ sel.counts }}</p>
+                <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <button style="border-radius:12px;background:#059669;padding:15px 8px;font-size:15px;font-weight:700;color:#fff;border:0;cursor:pointer" style-hover="background:#047857">🌲 カナカナ聞こえた！</button>
+                  <button style="border-radius:12px;background:#475569;padding:15px 8px;font-size:15px;font-weight:700;color:#fff;border:0;cursor:pointer" style-hover="background:#334155">🌙 今日は静かだった</button>
+                </div>
+                <div style="margin-top:9px;display:flex;align-items:center;gap:16px">
+                  <button style="font-size:13px;color:#0369a1;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;font:inherit">ひとこと添える（任意）</button>
+                  <a href="#" style="font-size:13px;color:#64748b;text-decoration:underline">𝕏で共有</a>
+                </div>
+              </div>
+              <sc-if value="{{ sel.hasToday }}" hint-placeholder-val="{{ true }}">
+                <div style="border-top:1px solid #f1f5f9;background:#f8fafc;padding:12px 20px 14px">
+                  <h3 style="margin:0 0 3px;font-size:12px;font-weight:700;color:#475569;letter-spacing:.06em">今日の報告</h3>
+                  <ul style="margin:0;padding:0;list-style:none">
+                    <sc-for list="{{ sel.today }}" as="r" hint-placeholder-count="3">
+                      <li style="display:flex;gap:11px;padding:7px 0;border-top:1px solid #e9eef4">
+                        <span style="flex:none;width:40px;font-size:12px;color:#64748b;padding-top:1px">{{ r.time }}</span>
+                        <span style="flex:1;min-width:0">
+                          <sc-if value="{{ r.heard }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#047857;font-weight:700">🌲 聞こえた</span></sc-if>
+                          <sc-if value="{{ r.quiet }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#64748b">🌙 静かだった</span></sc-if>
+                          <sc-if value="{{ r.hasComment }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:2px;font-size:12px;color:#64748b;line-height:1.5">{{ r.comment }}</span></sc-if>
+                        </span>
+                      </li>
+                    </sc-for>
+                  </ul>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <div style="position:absolute;right:74px;top:172px;width:250px;pointer-events:auto;background:rgba(255,255,255,.95);border-radius:11px;padding:11px 14px;box-shadow:0 3px 14px rgba(15,23,42,.18);display:flex;flex-wrap:wrap;gap:8px 14px">
+            <span style="display:flex;align-items:center;gap:7px;font-size:12px;color:#0f172a"><span style="width:16px;height:16px;border-radius:9999px;background:#059669;border:2.5px solid #fff;box-shadow:0 0 0 1px rgba(5,150,105,.35)"></span>今日</span>
+            <span style="display:flex;align-items:center;gap:7px;font-size:12px;color:#334155"><span style="width:13px;height:13px;border-radius:9999px;background:#f59e0b;border:2px solid #fff;box-shadow:0 0 0 1px rgba(245,158,11,.4)"></span>3日内</span>
+            <span style="display:flex;align-items:center;gap:7px;font-size:12px;color:#475569"><span style="width:11px;height:11px;border-radius:9999px;background:#fff;border:1.75px solid #64748b"></span>今季</span>
+            <span style="display:flex;align-items:center;gap:7px;font-size:12px;color:#64748b"><span style="width:8px;height:8px;border-radius:9999px;background:#94a3b8"></span>記録なし</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isCsp }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:12px;right:12px;top:12px;pointer-events:auto;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px;margin-right:44px;background:rgba(255,255,255,.97);border-radius:11px;padding:10px 13px;box-shadow:0 3px 14px rgba(15,23,42,.2)">
+              <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="地点名で探す" style="flex:1;min-width:0;border:0;outline:none;font-size:16px;color:#0f172a;background:none">
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;align-self:flex-start;background:#064e3b;color:#ecfdf5;border-radius:9999px;padding:7px 14px;box-shadow:0 3px 12px rgba(15,23,42,.24)">
+              <span style="font-size:13px;font-weight:700">{{ clock.state }}</span>
+              <span style="font-size:12px;color:#a7f3d0">{{ clock.remain }}</span>
+            </div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:14px;pointer-events:auto">
+            <div style="margin:0 12px 8px;align-self:flex-start;display:inline-block;font-size:12px;font-weight:700;color:#0f172a;background:rgba(255,255,255,.94);border-radius:9999px;padding:5px 12px;box-shadow:0 2px 8px rgba(15,23,42,.16)">{{ cardsTitle }}</div>
+            <div style="display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;padding:2px 12px 6px">
+              <sc-for list="{{ spCardList }}" as="c" hint-placeholder-count="5">
+                <button onClick="{{ c.select }}" style="flex:none;width:232px;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:13px 15px;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.18);font:inherit">
+                  <span style="display:flex;align-items:center;gap:8px">
+                    <span style="{{ c.dotStyle }}"></span>
+                    <sc-if value="{{ c.isToday }}" hint-placeholder-val="{{ true }}"><span style="font-size:12px;font-weight:700;color:#047857">{{ c.agoLabel }}</span></sc-if>
+                    <sc-if value="{{ c.notToday }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#64748b">{{ c.agoLabel }}</span></sc-if>
+                    <span style="margin-left:auto;font-size:13px;color:#f59e0b">{{ c.stars }}</span>
+                  </span>
+                  <span style="display:block;margin-top:7px;font-size:16px;font-weight:700;color:#0f172a;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</span>
+                  <span style="display:block;margin-top:3px;font-size:12px;color:#64748b">{{ c.city }} ・ {{ c.dist }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="{{ tip.style }}">
+          <div style="font-size:14px;font-weight:700;color:#0f172a;line-height:1.35;white-space:nowrap">{{ tip.name }}</div>
+          <div style="margin-top:3px;display:flex;align-items:center;gap:7px;white-space:nowrap">
+            <span style="{{ tip.dotStyle }}"></span>
+            <span style="font-size:12px;color:#475569">{{ tip.sub }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:24px;max-width:980px">
+    <div style="font-size:11px;letter-spacing:.14em;color:#a1a1aa;text-transform:uppercase;margin-bottom:10px">この案がやっていること</div>
+    <ul style="margin:0;padding-left:20px;color:#d4d4d8;font-size:13px;line-height:1.9">
+      <sc-for list="{{ notes }}" as="n" hint-placeholder-count="4">
+        <li>{{ n.text }}</li>
+      </sc-for>
+    </ul>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;panelWidth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:428,&quot;min&quot;:340,&quot;max&quot;:520,&quot;step&quot;:4,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;PCレイアウト&quot;},&quot;distanceWeight&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.5,&quot;min&quot;:0,&quot;max&quot;:1.5,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;おすすめ順の重み&quot;},&quot;labelZoom&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:9.8,&quot;min&quot;:9,&quot;max&quot;:14,&quot;step&quot;:0.2,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;地図のピン&quot;},&quot;pinScale&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.7,&quot;max&quot;:1.8,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;地図のピン&quot;},&quot;todayPulse&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;地図のピン&quot;}}">
+const LAYOUTS = {
+  A: {
+    title: "案A「今夜はここ」— 迷わせない",
+    lead: "155か所から選ばせるのをやめて、いま一番期待できる1か所を先に言い切る。残りはその次に置く。",
+    notes: [
+      "画面を開いた瞬間に読むものが「今夜はここ／見沼自然公園／8分前に聞こえた」の3つだけになる。比較は次の段落に降りてから",
+      "パネル上部の帯が「いま聞きどきの中にいる」ことを示す。出かけるかどうかの判断は、実は場所より時間で決まる",
+      "投稿2ボタンは左パネルの中に収まり、地図を見ながら押せる。横1300pxの全幅バナーは消えた",
+      "パネル最下段に今日の全報告を時刻順で置いた。おすすめ8件に入らない場所の動きもここで分かる",
+    ],
+  },
+  B: {
+    title: "案B「探して選ぶ」— 地図とリストを一つの道具に",
+    lead: "左に検索と一覧、右に全面地図。「今夜はここ」は根拠が立つ日だけ上に出て、投稿が無い日は黙って引っ込む。",
+    notes: [
+      "「今夜はここ」は★3以上かつ今日の確認があるときだけ出す。上のトグルで「投稿ゼロの日」に切り替えると、断定をやめて聞きどきの案内に変わる",
+      "リスト行にホバーすると地図のピンが光り、ピンにホバーすると名前が出る。クリックしなくても対応が分かる",
+      "地図右上の◎で現在地へ寄り、同時に並びが「近い順」になる。投稿が少ない時期はこれが主な探し方になる",
+      "スマホは既定が横並びカードで地図をほぼ全面使う。一覧が要るときだけシートを引き上げる",
+    ],
+  },
+  C: {
+    title: "案C「実況」— 地図を一切隠さない",
+    lead: "パネルを持たない案。情報は地図の上に浮き、下端の横並びカードと左の実況フィードで今の動きを追う。",
+    notes: [
+      "地図が1440px幅を全部使う。どこに緑が集まっているかが、文字を読む前に分かる",
+      "左下の実況フィードは全地点横断の時刻順。「18:09 狭山湖で聞こえた」が流れてくる画面",
+      "下端のカード列は今日聞こえた場所だけ。横に送れば今日の選択肢を端から端まで見られる",
+      "地点を選ぶとピンの近くにカードが出る。視線が地図から離れないまま投稿まで終わる",
+    ],
+  },
+};
+
+class Component extends DCLogic {
+  state = { layout: "B", device: "pc", places: [], selectedId: null, hoverId: null, tipPt: null, query: "", filter: "all", tab: "list", sort: "reco", sheet: "cards", dataMode: "now", located: false, bounds: 0, postState: { kind: "idle" }, comment: "", showComment: false };
+
+  componentDidMount() {
+    Promise.all([
+      import("./higurashi-core.js"),
+      fetch("data/places.json").then((r) => r.json()),
+    ]).then(([core, places]) => {
+      this.core = core;
+      this.now = core.sampleNow();
+      this.reports = core.sampleReports(this.now);
+      this.setState({ places }, () => { this.computeStats(); this.forceUpdate(); this.tryMap(); });
+    });
+    this.tryMap();
+  }
+  componentDidUpdate(prev) {
+    if (!this.mapReady) return;
+    if (prev.pinScale !== this.props.pinScale) this.sizePins();
+    if (prev.todayPulse !== this.props.todayPulse) {
+      const on = this.props.todayPulse ?? true;
+      for (const id in this.pulses) this.pulses[id].getElement().style.display = on ? "" : "none";
+      if (on) this.pushData();
+    }
+  }
+
+  computeStats() {
+    const { placeStats } = this.core;
+    const byPlace = new Map();
+    for (const r of this.reports) {
+      const l = byPlace.get(r.place_id);
+      if (l) l.push(r); else byPlace.set(r.place_id, [r]);
+    }
+    this.stats = {};
+    for (const p of this.state.places) this.stats[p.id] = placeStats(byPlace.get(p.id) || [], this.now);
+  }
+
+  setMapEl = (el) => { this.mapEl = el; this.tryMap(); };
+
+  tryMap = () => {
+    if (this.map || !this.mapEl || !window.L || !this.core || !this.state.places.length) {
+      if (!this.map) setTimeout(this.tryMap, 150);
+      return;
+    }
+    this.initMap();
+  };
+
+  // 鮮度で「大きさ・色・縁取り」の3つを同時に変える。
+  // 🟢今日を最大・最も濃く、⚫記録なしを最小・縁なしにして、地図の第一印象を今日に寄せる。
+  pinStyle(fresh) {
+    const z = Math.max(8, Math.min(14, this.map.getZoom()));
+    const R = { today: [7.5, 11, 15], recent3d: [5.5, 8.5, 11], season: [4, 6.5, 9], none: [2.5, 4.5, 6] }[fresh];
+    const scale = this.props.pinScale ?? 1;
+    const radius = (z <= 11 ? R[0] + (R[1] - R[0]) * ((z - 8) / 3) : R[1] + (R[2] - R[1]) * ((z - 11) / 3)) * scale;
+    const S = {
+      today: { fillColor: "#059669", color: "#ffffff", weight: 2.5, fillOpacity: 1 },
+      recent3d: { fillColor: "#f59e0b", color: "#ffffff", weight: 2, fillOpacity: 1 },
+      season: { fillColor: "#ffffff", color: "#64748b", weight: 1.75, fillOpacity: 1 },
+      none: { fillColor: "#94a3b8", color: "#e2e8f0", weight: 1, fillOpacity: 0.85 },
+    }[fresh];
+    return { radius, opacity: 1, ...S };
+  }
+
+  initMap() {
+    const L = window.L;
+    const map = L.map(this.mapEl, { zoomControl: false, zoomSnap: 0.1, fadeAnimation: false }).setView([35.78, 139.56], 10);
+    L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      crossOrigin: "anonymous",
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>',
+    }).addTo(map);
+    L.control.zoom({ position: "topright" }).addTo(map);
+    // 現在地ボタン。押すと現在地へ寄って、並びを「近い順」に切り替える。
+    // 「今どこにいて、そこから何が近いか」が1タップで揃うのがGoogle Mapsの作法。
+    const goToMe = this.goToMe;
+    const Locate = L.Control.extend({
+      options: { position: "topright" },
+      onAdd() {
+        const d = L.DomUtil.create("div", "leaflet-bar");
+        const a = L.DomUtil.create("a", "", d);
+        a.href = "#";
+        a.title = "現在地から近い場所を探す";
+        a.style.cssText = "font-size:17px;line-height:30px;text-align:center;color:#334155";
+        a.textContent = "◎";
+        L.DomEvent.on(a, "click", (e) => { L.DomEvent.stop(e); goToMe(); });
+        return d;
+      },
+    });
+    map.addControl(new Locate());
+
+    // 🟢今日のピンだけ、広がる輪を重ねる。地図を見た瞬間に視線が今日へ行くように。
+    map.createPane("pulse");
+    map.getPane("pulse").style.zIndex = 350;
+    map.getPane("pulse").style.pointerEvents = "none";
+
+    map.on("click", () => this.select(null));
+    map.on("zoomend", () => { this.sizePins(); this.syncLabels(); });
+    map.on("moveend", () => { this.syncLabels(); this.setState((s) => ({ bounds: s.bounds + 1 })); });
+
+    this.map = map;
+    this.pins = {};
+    this.pulses = {};
+    this.hovRing = L.circleMarker([0, 0], { radius: 17, color: "#0f172a", weight: 3, opacity: 0, fill: false, interactive: false }).addTo(map);
+    this.selRing = L.circleMarker([0, 0], { radius: 20, color: "#0f172a", weight: 4, opacity: 0, fill: false, interactive: false }).addTo(map);
+    this.mapReady = true;
+    this.pushData();
+  }
+
+  // ズームを寄せたときだけ、🟢今日のピンに地点名を出す。
+  // 出すのは今日だけ。155件すべてに出すと地図が文字で埋まって、逆に何も読めなくなる。
+  syncLabels() {
+    if (!this.mapReady || !this.stats) return;
+    const z = this.map.getZoom();
+    const min = this.props.labelZoom ?? 9.8;
+    const off = this.pinStyle("today").radius + 6;
+    const size = this.map.getSize();
+
+    // 期待度の高い順に置いていき、すでに置いたラベルと重なるものは出さない。
+    // Leafletは衝突を避けてくれないので、出す前にこちらで場所取りをする。
+    const shown = [];
+    const cand = this.state.places
+      .filter((p) => this.pins[p.id] && z >= min && this.stats[p.id].freshness === "today")
+      .sort((a, b) => this.stats[b.id].score - this.stats[a.id].score);
+
+    for (const p of this.state.places) {
+      const m = this.pins[p.id];
+      if (!m) continue;
+      if (cand.indexOf(p) === -1) { if (m.getTooltip()) m.unbindTooltip(); continue; }
+
+      // 「狭山湖（トトロの森・狭山丘陵）」→「狭山湖」。区切りの前までが呼び名。
+      const label = p.name.split(/[（(・]/)[0] || p.name;
+      const pt = this.map.latLngToContainerPoint([p.lat, p.lng]);
+      const w = label.length * 12 + 16;
+      const h = 22;
+      // 右端に近いピンは左出しにして、スマホ幅でも地図の外へはみ出さない
+      const left = pt.x + off + w > size.x - 8;
+      const x = left ? pt.x - off - w : pt.x + off;
+      const box = { x1: x, y1: pt.y - h / 2, x2: x + w, y2: pt.y + h / 2 };
+      const hit = box.x1 < 4 || box.x2 > size.x - 4
+        || shown.some((b) => box.x1 < b.x2 + 4 && box.x2 + 4 > b.x1 && box.y1 < b.y2 + 2 && box.y2 + 2 > b.y1);
+
+      if (hit) { if (m.getTooltip()) m.unbindTooltip(); continue; }
+      shown.push(box);
+      const dir = left ? "left" : "right";
+      const tip = m.getTooltip();
+      if (tip && tip.options.direction === dir && tip.getContent() === label) continue;
+      if (tip) m.unbindTooltip();
+      m.bindTooltip(label, { permanent: true, direction: dir, offset: [left ? -off : off, 0], className: "hig-label", opacity: 1 });
+    }
+  }
+
+  // 投稿は2ボタンのまま。画面遷移も入力必須項目も足さない。
+  post = (heard) => {
+    if (this.state.postState.kind === "sending") return;
+    this.setState({ postState: { kind: "sending", heard } });
+    clearTimeout(this.postTimer);
+    this.postTimer = setTimeout(() => this.setState({ postState: { kind: "done", heard }, showComment: false, comment: "" }), 800);
+  };
+
+  goToMe = () => {
+    if (!this.mapReady) return;
+    const L = window.L;
+    const { SAMPLE_POS } = this.core;
+    if (!this.meMarker) {
+      this.meMarker = L.marker([SAMPLE_POS.lat, SAMPLE_POS.lng], {
+        interactive: false,
+        icon: L.divIcon({
+          className: "",
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+          html: '<span style="display:block;width:22px;height:22px;border-radius:9999px;background:rgba(14,165,233,.22)"><span style="display:block;margin:5px;width:12px;height:12px;border-radius:9999px;background:#0ea5e9;border:2px solid #fff;box-shadow:0 1px 3px rgba(15,23,42,.4)"></span></span>',
+        }),
+      }).addTo(this.map);
+    }
+    this.setState({ sort: "near", located: true, selectedId: null }, () => {
+      this.paintRings();
+      this.map.flyTo([SAMPLE_POS.lat, SAMPLE_POS.lng], 11.4, { duration: 0.9 });
+    });
+  };
+
+  setDataMode = (m) => {
+    this.reports = m === "empty" ? [] : this.core.sampleReports(this.now);
+    this.computeStats();
+    this.setState({ dataMode: m, selectedId: null, filter: "all" }, () => this.pushData());
+  };
+
+  sizePins() {
+    if (!this.mapReady) return;
+    for (const id in this.pins) this.pins[id].setRadius(this.pinStyle(this.stats[id].freshness).radius);
+  }
+
+  pushData() {
+    if (!this.mapReady || !this.stats) return;
+    const L = window.L;
+    const { FRESHNESS_ORDER } = this.core;
+    const ordered = [...this.state.places].sort(
+      (a, b) => FRESHNESS_ORDER.indexOf(this.stats[a.id].freshness) - FRESHNESS_ORDER.indexOf(this.stats[b.id].freshness)
+    );
+    for (const p of ordered) {
+      const fresh = this.stats[p.id].freshness;
+      const st = this.pinStyle(fresh);
+      let m = this.pins[p.id];
+      if (!m) {
+        m = L.circleMarker([p.lat, p.lng], st).addTo(this.map);
+        m.on("click", (e) => { L.DomEvent.stop(e); this.select(p.id); });
+        m.on("mouseover", () => this.setHover(p.id, this.map.latLngToContainerPoint([p.lat, p.lng])));
+        m.on("mouseout", () => this.setHover(null, null));
+        this.pins[p.id] = m;
+      } else {
+        m.setStyle(st);
+        m.setRadius(st.radius);
+        m.bringToFront();
+      }
+      if (fresh !== "today" && this.pulses[p.id]) {
+        this.map.removeLayer(this.pulses[p.id]);
+        delete this.pulses[p.id];
+      }
+      if (fresh === "today" && (this.props.todayPulse ?? true) && !this.pulses[p.id]) {
+        this.pulses[p.id] = L.marker([p.lat, p.lng], {
+          pane: "pulse",
+          interactive: false,
+          icon: L.divIcon({
+            className: "",
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
+            html: '<span style="display:block;width:36px;height:36px;border-radius:9999px;background:#059669;animation:higPulse 2.4s ease-out infinite"></span>',
+          }),
+        }).addTo(this.map);
+      }
+    }
+    this.paintRings();
+    this.syncLabels();
+  }
+
+  paintRings() {
+    const byId = {};
+    for (const p of this.state.places) byId[p.id] = p;
+    const s = this.state.selectedId ? byId[this.state.selectedId] : null;
+    if (s) { this.selRing.setLatLng([s.lat, s.lng]); this.selRing.setStyle({ opacity: 1 }); this.selRing.bringToFront(); }
+    else this.selRing.setStyle({ opacity: 0 });
+    const h = this.state.hoverId ? byId[this.state.hoverId] : null;
+    if (h) { this.hovRing.setLatLng([h.lat, h.lng]); this.hovRing.setStyle({ opacity: 0.5 }); this.hovRing.bringToFront(); }
+    else this.hovRing.setStyle({ opacity: 0 });
+  }
+
+  setHover = (id, pt) => {
+    if (id === this.state.hoverId && !pt) return;
+    this.setState({ hoverId: id, tipPt: pt }, () => this.mapReady && this.paintRings());
+  };
+
+  // 一覧の行にホバー → 地図のピンが光る。地図の主役はあくまで地図側。
+  hoverFromList = (id) => () => {
+    this.setState({ hoverId: id, tipPt: null }, () => this.mapReady && this.paintRings());
+  };
+
+  select = (id) => {
+    clearTimeout(this.postTimer);
+    this.setState({ selectedId: id, postState: { kind: "idle" }, showComment: false, comment: "" }, () => {
+      if (!this.mapReady) return;
+      this.paintRings();
+      if (!id) return;
+      const p = this.state.places.find((x) => x.id === id);
+      if (!p) return;
+      const z = Math.max(this.map.getZoom(), 11.5);
+      // 左のパネルに隠れないよう、パネル幅の半分だけ中心をずらす
+      const dx = this.state.device === "pc" ? (this.state.layout === "A" ? 214 : this.state.layout === "B" ? 196 : 0) : 0;
+      const dy = this.state.device === "pc" ? (this.state.layout === "C" ? -90 : 0) : -110;
+      const pt = this.map.project([p.lat, p.lng], z).subtract([dx, dy]);
+      this.map.flyTo(this.map.unproject(pt, z), z, { duration: 0.7 });
+    });
+  };
+
+  setLayout = (layout) => this.setState({ layout, selectedId: null }, () => setTimeout(() => this.map && this.map.invalidateSize(), 80));
+  setDevice = (device) => this.setState({ device }, () => setTimeout(() => this.map && this.map.invalidateSize(), 100));
+
+  dotStyle(fresh, size) {
+    const f = this.core.FRESHNESS[fresh];
+    const s = size || (fresh === "today" ? 14 : fresh === "recent3d" ? 12 : 10);
+    const border = fresh === "season" ? "1.75px solid " + f.dotRing : fresh === "none" ? "0" : "2px solid #fff";
+    const halo = fresh === "today" ? ";box-shadow:0 0 0 1px rgba(5,150,105,.4)" : fresh === "recent3d" ? ";box-shadow:0 0 0 1px rgba(245,158,11,.45)" : "";
+    return "flex:none;display:block;width:" + s + "px;height:" + s + "px;border-radius:9999px;background:" + f.dot + ";border:" + border + halo;
+  }
+
+  renderVals() {
+    const { layout, device } = this.state;
+    const L = LAYOUTS[layout];
+    const pc = device === "pc";
+    const tab = (on) => "padding:7px 13px;font-size:12px;font-weight:700;border:0;border-radius:7px;cursor:pointer;white-space:nowrap;" + (on ? "background:#fafafa;color:#18181b" : "background:transparent;color:#a1a1aa");
+
+    const base = {
+      mapRef: this.setMapEl,
+      layoutTitle: L.title,
+      layoutLead: L.lead,
+      notes: L.notes.map((text, i) => ({ text, i })),
+      pickA: () => this.setLayout("A"), pickB: () => this.setLayout("B"), pickC: () => this.setLayout("C"),
+      showPc: () => this.setDevice("pc"), showSp: () => this.setDevice("sp"),
+      tabA: tab(layout === "A"), tabB: tab(layout === "B"), tabC: tab(layout === "C"),
+      tabPc: tab(pc), tabSp: tab(!pc),
+      tabNow: tab(this.state.dataMode === "now"), tabEmpty: tab(this.state.dataMode === "empty"),
+      pickNow: () => this.setDataMode("now"), pickEmpty: () => this.setDataMode("empty"),
+      frameStyle: "width:" + (pc ? 1440 : 390) + "px;height:" + (pc ? 900 : 844) + "px;display:flex;flex-direction:column;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.45)",
+      isApc: layout === "A" && pc, isAsp: layout === "A" && !pc,
+      isBpc: layout === "B" && pc, isBsp: layout === "B" && !pc,
+      isCpc: layout === "C" && pc, isCsp: layout === "C" && !pc,
+      tip: { style: "display:none", name: "", sub: "", dotStyle: "" },
+    };
+    if (!this.core || !this.stats) return base;
+
+    const { starsText, timeText, agoText, reasonText, rankScore, hm, distanceKm, sunsetDate, FRESHNESS, SAMPLE_POS } = this.core;
+    const now = this.now;
+    const byId = {};
+    for (const p of this.state.places) byId[p.id] = p;
+
+    const scored = this.state.places.map((p) => {
+      const s = this.stats[p.id];
+      return { p, s, dist: distanceKm(SAMPLE_POS.lat, SAMPLE_POS.lng, p.lat, p.lng) };
+    });
+    const near = this.state.sort === "near";
+    scored.sort(near
+      ? (a, b) => a.dist - b.dist || b.s.score - a.s.score
+      : (a, b) => rankScore(b.s, b.dist, this.props.distanceWeight) - rankScore(a.s, a.dist, this.props.distanceWeight) || (b.s.lastHeardAt || 0) - (a.s.lastHeardAt || 0));
+
+    const row = (x) => ({
+      id: x.p.id,
+      name: x.p.name,
+      city: x.p.city,
+      dist: x.dist.toFixed(1) + "km",
+      stars: starsText(x.s.stars),
+      ago: x.s.lastHeardAt ? agoText(x.s.lastHeardAt, now) : "記録なし",
+      agoLabel: x.s.lastHeardAt ? agoText(x.s.lastHeardAt, now) + "に確認" : "今シーズンの記録なし",
+      reason: reasonText(x.s, now),
+      isToday: x.s.freshness === "today",
+      notToday: x.s.freshness !== "today",
+      dotStyle: this.dotStyle(x.s.freshness),
+      fresh: x.s.freshness,
+      select: () => this.select(x.p.id),
+      enter: this.hoverFromList(x.p.id),
+      leave: this.hoverFromList(null),
+    });
+
+    // 「今夜はここ」の母集団は今シーズンの記録がある場所だけ。
+    // 記録なし139か所を混ぜて上位8件を出しても、下のほうは根拠のない並びになる。
+    // ただし記録が1件も無い時期は母集団が空になるので、近い順の候補で埋める。
+    const withRecord = scored.filter((x) => x.s.freshness !== "none");
+    const candidates = withRecord.length ? withRecord : [...scored].sort((a, b) => a.dist - b.dist);
+    const noRecord = withRecord.length === 0;
+    const top = candidates.slice(0, 8);
+    const basis = near
+      ? "記録のある" + withRecord.length + "か所のうち、いちばん近い場所"
+      : "記録のある" + withRecord.length + "か所を、期待度と距離で並べた1位";
+    const listTitle = noRecord ? "近くのヒグラシスポット" : "ほかに期待できる場所";
+    const hero = top[0] ? (() => {
+      const h = top[0];
+      const lastComment = this.reports.filter((r) => r.place_id === h.p.id && r.heard && r.comment)[0];
+      return {
+        name: h.p.name,
+        city: h.p.pref === "東京都" ? h.p.city : h.p.pref + h.p.city,
+        dist: "ここから " + h.dist.toFixed(1) + "km",
+        stars: starsText(h.s.stars),
+        agoHeard: h.s.lastHeardAt ? agoText(h.s.lastHeardAt, now) + "に聞こえた" : "今シーズンの記録なし",
+        hasComment: !!lastComment,
+        comment: lastComment ? lastComment.comment : "",
+        reason: reasonText(h.s, now),
+        counts: "昨日 " + h.s.yesterdayHeardCount + "件 ・ 今シーズン計 " + h.s.seasonHeardCount + "件",
+        basis,
+        select: () => this.select(h.p.id),
+      };
+    })() : { name: "", city: "", dist: "", stars: "", agoHeard: "", hasComment: false, comment: "", reason: "", counts: "", basis: "", select: () => {} };
+
+    // ★3以上かつ今日の確認がある場合だけ「今夜はここ」を出す。
+    // 期待度が★1〜2の日に「今夜はここ」と言い切るのは、根拠のない断定になる。
+    const heroReady = !!(top[0] && top[0].s.freshness === "today" && top[0].s.stars >= 3);
+    const heroThin = !heroReady;
+    const spCards = !pc && layout === "B" && this.state.sheet === "cards";
+
+    const sortBtn = (on) => "background:none;border:0;padding:0;cursor:pointer;font:inherit;font-size:12px;line-height:1.2;" +
+      (on ? "color:#064e3b;font-weight:700;text-decoration:underline;text-underline-offset:3px;" : "color:#64748b;");
+    const sortCtl = {
+      reco: sortBtn(!near), near: sortBtn(near),
+      recoPick: () => this.setState({ sort: "reco" }), nearPick: () => this.setState({ sort: "near" }),
+      label: near ? "近い順" : "おすすめ順",
+    };
+
+    const feedAll = this.reports
+      .filter((r) => Date.parse(r.created_at) >= new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime())
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map((r) => {
+        const p = byId[r.place_id];
+        return {
+          id: r.id,
+          time: hm(new Date(r.created_at)),
+          place: p ? p.name : r.place_id,
+          heard: r.heard, quiet: !r.heard,
+          hasComment: !!r.comment, comment: r.comment ? "「" + r.comment + "」" : "",
+          select: () => this.select(r.place_id),
+          enter: this.hoverFromList(r.place_id),
+          leave: this.hoverFromList(null),
+        };
+      });
+
+    const fcount = { today: 0, recent3d: 0, season: 0, none: 0 };
+    for (const p of this.state.places) fcount[this.stats[p.id].freshness]++;
+
+    const sunset = sunsetDate(now, SAMPLE_POS.lat, SAMPLE_POS.lng);
+    const winFrom = new Date(sunset.getTime() - 30 * 60000);
+    const winTo = new Date(sunset.getTime() + 30 * 60000);
+    const span = winTo - winFrom;
+    const posPct = Math.max(0, Math.min(100, ((now - winFrom) / span) * 100));
+    const inWindow = now >= winFrom && now <= winTo;
+    const clock = {
+      state: inWindow ? "いま聞きどき" : now < winFrom ? "聞きどきはこれから" : "今日の聞きどきは過ぎた",
+      remain: inWindow ? hm(winTo) + "まで あと" + Math.round((winTo - now) / 60000) + "分"
+        : now < winFrom ? "あと" + Math.round((winFrom - now) / 60000) + "分で始まる" : "明け方にもよく鳴く",
+      from: hm(winFrom), to: hm(winTo), sunset: hm(sunset), now: hm(now),
+      fillStyle: "position:absolute;left:0;top:0;bottom:0;width:" + posPct + "%;border-radius:3px;background:#6ee7b7",
+      sunStyle: "position:absolute;left:50%;top:-5px;width:2px;height:16px;background:#f59e0b;border-radius:1px",
+      markStyle: "position:absolute;left:" + posPct + "%;top:-4px;width:14px;height:14px;margin-left:-7px;border-radius:9999px;background:#047857;border:3px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,.35)",
+    };
+
+    // パネル幅は DESIGN.md で「360〜420px固定」と保留になっていた箇所。Tweaksで動かせるようにしてある。
+    const pw = this.props.panelWidth ?? 428;
+    const panelBase = "position:absolute;left:0;top:0;bottom:0;pointer-events:auto;background:#fff;box-shadow:3px 0 22px rgba(15,23,42,.15);display:flex;flex-direction:column;width:";
+    const panelA = panelBase + pw + "px";
+    const panelB = panelBase + (pw - 36) + "px";
+    const chipA = "position:absolute;left:" + (pw + 24) + "px;top:16px;pointer-events:auto;display:flex;gap:8px";
+    const legendA = "position:absolute;left:" + (pw + 24) + "px;bottom:18px;pointer-events:auto;background:rgba(255,255,255,.96);border:1px solid #e2e8f0;border-radius:12px;padding:12px 15px;box-shadow:0 3px 14px rgba(15,23,42,.12)";
+    const legendB = "position:absolute;left:" + (pw - 12) + "px;bottom:18px;pointer-events:auto;background:rgba(255,255,255,.96);border:1px solid #e2e8f0;border-radius:12px;padding:11px 14px;box-shadow:0 3px 14px rgba(15,23,42,.12);display:flex;gap:16px;align-items:center";
+
+    const selPlace = this.state.selectedId ? byId[this.state.selectedId] : null;
+    const ss = selPlace ? this.stats[selPlace.id] : null;
+    const sel = selPlace ? {
+      name: selPlace.name,
+      city: selPlace.pref + " " + selPlace.city,
+      dist: "ここから " + distanceKm(SAMPLE_POS.lat, SAMPLE_POS.lng, selPlace.lat, selPlace.lng).toFixed(1) + "km",
+      stars: starsText(ss.stars),
+      last: ss.lastHeardAt ? "最終確認 " + timeText(ss.lastHeardAt, now) : "今シーズンの確認はまだありません",
+      counts: "今日 " + ss.todayHeardCount + " 件確認 ・ 昨日 " + ss.yesterdayHeardCount + " 件 ・ 今シーズン計 " + ss.seasonHeardCount + " 件",
+      reason: reasonText(ss, now),
+      freshLabel: FRESHNESS[ss.freshness].label,
+      dotStyle: this.dotStyle(ss.freshness, 12),
+      hasToday: ss.todayReports.length > 0,
+      today: ss.todayReports.slice(0, 8).map((r) => ({
+        id: r.id, time: hm(new Date(r.created_at)), heard: r.heard, quiet: !r.heard,
+        hasComment: !!r.comment, comment: r.comment ? "「" + r.comment + "」" : "",
+      })),
+    } : { name: "", city: "", dist: "", stars: "", last: "", counts: "", reason: "", freshLabel: "", dotStyle: "", hasToday: false, today: [] };
+
+    let tip = base.tip;
+    const hp = this.state.hoverId ? byId[this.state.hoverId] : null;
+    if (hp && this.state.tipPt) {
+      const hs = this.stats[hp.id];
+      tip = {
+        style: "position:absolute;left:" + this.state.tipPt.x + "px;top:" + (this.state.tipPt.y - 16) + "px;transform:translate(-50%,-100%);pointer-events:none;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:9px 13px;box-shadow:0 6px 20px rgba(15,23,42,.2);z-index:40",
+        name: hp.name,
+        sub: hs.lastHeardAt ? agoText(hs.lastHeardAt, now) + "に聞こえた ・ " + starsText(hs.stars) : FRESHNESS[hs.freshness].label,
+        dotStyle: this.dotStyle(hs.freshness, 10),
+      };
+    }
+
+    // 案B: 検索語・鮮度チップ・地図の表示範囲の3つで絞った一覧
+    const q = this.state.query.trim();
+    let inView = scored;
+    if (this.mapReady) {
+      const b = this.map.getBounds();
+      inView = scored.filter((x) => b.contains([x.p.lat, x.p.lng]));
+    }
+    let bScored = inView;
+    if (q) bScored = bScored.filter((x) => x.p.name.includes(q));
+    if (this.state.filter !== "all") bScored = bScored.filter((x) => x.s.freshness === this.state.filter);
+    const bList = bScored.map(row);
+    const bCount = q
+      ? "「" + q + "」で " + bList.length + "件"
+      : "表示中の範囲に " + bList.length + "件";
+
+    const chipBase = "border-radius:9999px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font:inherit;line-height:1.2;";
+    // チップは置かれる面によって選択中の出し方を変える。
+    // 濃いヘッダーの上（スマホ）で緑を塗ると、選択中だけが消えて未選択が選択に見える。
+    const chip = (on, surface) => {
+      if (surface === "dark") {
+        return chipBase + (on
+          ? "background:#ecfdf5;color:#064e3b;border:1px solid #ecfdf5;"
+          : "background:rgba(255,255,255,.12);color:#d1fae5;border:1px solid rgba(255,255,255,.45);");
+      }
+      const float = surface === "float";
+      return chipBase + (on
+        ? "background:#064e3b;color:#ecfdf5;border:1px solid #064e3b;"
+        : "background:" + (float ? "rgba(255,255,255,.95)" : "#fff") + ";color:#475569;border:1px solid #cbd5e1;")
+        + (float ? "box-shadow:0 2px 10px rgba(15,23,42,.16);" : "");
+    };
+    const setFilter = (f) => () => this.setState({ filter: f, selectedId: null });
+    const f = this.state.filter;
+    const chips = {
+      nAll: this.state.places.length, nToday: fcount.today, nRecent: fcount.recent3d, nSeason: fcount.season,
+      all: chip(f === "all"), today: chip(f === "today"), recent: chip(f === "recent3d"), season: chip(f === "season"),
+      allSp: chip(f === "all", "dark"), todaySp: chip(f === "today", "dark"), recentSp: chip(f === "recent3d", "dark"), seasonSp: chip(f === "season", "dark"),
+      allFloat: chip(f === "all", "float"), todayFloat: chip(f === "today", "float"), recentFloat: chip(f === "recent3d", "float"),
+      allPick: setFilter("all"), todayPick: setFilter("today"), recentPick: setFilter("recent3d"), seasonPick: setFilter("season"),
+    };
+
+    const panelTab = (on) => "background:none;border:0;padding:0 0 10px;font-size:14px;font-weight:700;cursor:pointer;font:inherit;line-height:1.2;" +
+      (on ? "color:#064e3b;box-shadow:inset 0 -2px 0 #059669;" : "color:#64748b;");
+    const tabs = {
+      list: panelTab(this.state.tab === "list"), feed: panelTab(this.state.tab === "feed"),
+      listPick: () => this.setState({ tab: "list" }), feedPick: () => this.setState({ tab: "feed" }),
+    };
+
+    const todayCards = scored.filter((x) => x.s.freshness === "today").map(row);
+
+    return {
+      ...base,
+      hero,
+      // ヒーローを出さない日は1件目を削らない。案内文が指している「下の場所」の先頭がそれ。
+      rest: (heroReady ? top.slice(1) : top).map(row),
+      restSp: (heroReady ? top.slice(1, 5) : top.slice(0, 4)).map(row),
+      feed: feedAll,
+      query: this.state.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      chips, tabs, bList, bCount, sortCtl,
+      bCountShort: bList.length + "件",
+      panelA, panelB, chipA, legendA, legendB,
+      // 「今夜はここ」は根拠が立つときだけ出す。シーズン初日のように投稿がゼロなら黙って引っ込む。
+      heroReady, heroThin, listTitle,
+      emptyToday: fcount.today === 0,
+      hasToday: fcount.today > 0,
+      hasFeed: feedAll.length > 0,
+      noFeed: feedAll.length === 0,
+      sheetCards: spCards, sheetList: !spCards,
+      sheetStyle: selPlace ? "display:none"
+        : "position:absolute;left:0;right:0;bottom:0;pointer-events:auto;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -6px 22px rgba(15,23,42,.18);display:flex;flex-direction:column;"
+          + (spCards ? "max-height:none" : "max-height:56%"),
+      spDetail: !pc && layout === "B" && !!selPlace,
+      postNotDone: this.state.postState.kind !== "done",
+      postIdle: this.state.postState.kind === "idle",
+      postSending: this.state.postState.kind === "sending",
+      postDone: this.state.postState.kind === "done",
+      postHeard: this.state.postState.kind === "done" && this.state.postState.heard,
+      postHeard2: this.state.postState.kind === "done" && this.state.postState.heard,
+      postHeardBtn: () => this.post(true),
+      postQuietBtn: () => this.post(false),
+      closeDone: () => this.setState({ postState: { kind: "idle" } }),
+      openList: () => this.setState({ sheet: "list" }),
+      openCards: () => this.setState({ sheet: "cards" }),
+      // スマホは地図を潰さないよう、既定を横並びカードにする。今日の記録が無ければ近い順の候補を出す。
+      spCardList: (fcount.today > 0 ? todayCards : bList).slice(0, 12),
+      cardsTitle: fcount.today > 0 ? "今日カナカナが聞こえた " + fcount.today + "か所" : "今日の報告はまだなし ・ 近い順",
+      bShowList: this.state.tab === "list" && !spCards,
+      bShowFeed: this.state.tab === "feed" && !spCards,
+      bEmpty: bList.length === 0,
+      todayCards,
+      counts: {
+        headline: "155か所 ・ 今日 " + fcount.today + "か所で確認",
+        listNote: "155件中 上位8件",
+        feedNote: feedAll.length + "件",
+      },
+      clock,
+      noSel: !selPlace,
+      hasSel: !!selPlace,
+      sel,
+      clearSel: () => this.select(null),
+      posLabel: SAMPLE_POS.label,
+      tip,
+    };
+  }
+}
+</script>
+</body>
+</html>
