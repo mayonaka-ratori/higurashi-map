@@ -4,6 +4,8 @@
 
 ヒグラシを聞きたい人が、今日聞ける場所へ行けるようにするための匿名共有マップ。
 
+**公開中: https://higurashi-map-xi.vercel.app/** （2026-08-08リリース）
+
 ## ドキュメント
 
 - [docs/VISION.md](docs/VISION.md) — 何のためのサービスか・作らないもの
