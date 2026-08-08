@@ -44,12 +44,14 @@ npm run design
 
 1. **Supabase** (https://supabase.com) でプロジェクトを作成（無料枠でOK、リージョンは Tokyo 推奨）
 2. SQL Editor で `supabase/schema.sql` の中身を貼り付けて Run
-3. Project Settings → API から URL と anon key をコピー
+3. Project Settings → API Keys から Project URL と **Publishable key** をコピー
+   （旧 anon キーの後継。ブラウザに出てよい公開用キー。**Secret keys は使わない**）
 4. プロジェクト直下に `.env.local` を作る:
    ```
    NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
    ```
+   （環境変数名は歴史的に ANON_KEY のままだが、値は Publishable key でよい）
 5. **Vercel** (https://vercel.com) にこのリポジトリをインポートし、
    上と同じ2つの環境変数を設定してデプロイ
 
