@@ -48,6 +48,24 @@ places.forEach((p, i) => {
   if (typeof p?.lng === "number" && (p.lng < LNG_MIN || p.lng > LNG_MAX)) {
     errors.push(`${label}: lng ${p.lng} が関東の範囲外（${LNG_MIN}〜${LNG_MAX}）。打ち間違いの疑い`);
   }
+  if (p?.externalRecord !== undefined) {
+    const r = p.externalRecord;
+    if (typeof r !== "object" || r === null) {
+      errors.push(`${label}: externalRecord はオブジェクトである必要がある`);
+    } else {
+      for (const key of ["date", "time", "source", "url"]) {
+        if (typeof r[key] !== "string" || r[key] === "") {
+          errors.push(`${label}: externalRecord.${key} がない`);
+        }
+      }
+      if (typeof r.date === "string" && !/^\d{4}-\d{2}-(\d{2}|XX)$/.test(r.date)) {
+        errors.push(`${label}: externalRecord.date "${r.date}" は YYYY-MM-DD か YYYY-MM-XX の形式にする`);
+      }
+      if (typeof r.url === "string" && !/^https?:\/\//.test(r.url)) {
+        errors.push(`${label}: externalRecord.url "${r.url}" がURLの形式でない`);
+      }
+    }
+  }
 });
 
 // 200m以内の近接ペアは重複登録の疑い

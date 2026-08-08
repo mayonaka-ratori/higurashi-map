@@ -394,6 +394,26 @@ export default function App() {
               {selectedStats.seasonHeardCount} 件
             </p>
 
+            {selected.externalRecord && (
+              <div className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
+                {selected.externalRecord.date.replace(
+                  /^(\d{4})-(\d{2})-(\d{2}|XX)$/,
+                  (_, y, m, d) => `${y}年${Number(m)}月${d === "XX" ? "" : `${Number(d)}日`}`
+                )}
+                {selected.externalRecord.time !== "不明" &&
+                  ` ${selected.externalRecord.time}`}
+                、ヒグラシの声が聞こえたという記録があります。
+                <a
+                  className="ml-1 text-sky-600 underline"
+                  href={selected.externalRecord.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  記録を見る（外部サイト）
+                </a>
+              </div>
+            )}
+
             {postState.kind === "done" ? (
               <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
                 <p className="font-bold">カナカナ情報を受け取りました。</p>

@@ -5,6 +5,14 @@ export type Place = {
   city: string;
   lat: number;
   lng: number;
+  // 公式サイトやブログなど、アプリの外で見つかったヒグラシの記録（任意）。
+  // reportsテーブルの投稿とは別物（匿名リアルタイム投稿ではなく、こちらで調べた記録）。
+  externalRecord?: {
+    date: string; // "2026-08-01" または "2026-08-XX"
+    time: string; // "夕方" など。不明なら "不明"
+    source: string;
+    url: string;
+  };
 };
 
 export type Report = {
