@@ -68,6 +68,7 @@ export default function App() {
   );
   const [postState, setPostState] = useState<PostState>({ kind: "idle" });
   const [query, setQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const [comment, setComment] = useState("");
   const [showComment, setShowComment] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -259,9 +260,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* 下のパネル */}
+      {/* 下のパネル。検索中は高さを固定して、結果の増減で地図がカタカタ動くのを防ぐ */}
       <div
-        className="z-20 max-h-[48%] overflow-y-auto border-t border-slate-300 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]"
+        className={`z-20 overflow-y-auto border-t border-slate-300 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] ${
+          !selected && (searchFocused || query.trim() !== "")
+            ? "h-[48%]"
+            : "max-h-[48%]"
+        }`}
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
         {!selected && (
@@ -274,6 +279,8 @@ export default function App() {
                 placeholder="地点名で探す（例: 見沼、高尾）"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
                 aria-label="地点名で探す"
               />
               {query && (
