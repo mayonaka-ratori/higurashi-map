@@ -67,6 +67,7 @@ export default function App() {
     null
   );
   const [postState, setPostState] = useState<PostState>({ kind: "idle" });
+  const [query, setQuery] = useState("");
   const [comment, setComment] = useState("");
   const [showComment, setShowComment] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -140,6 +141,16 @@ export default function App() {
   const selected = selectedId
     ? places.find((p) => p.id === selectedId) ?? null
     : null;
+
+  // 地点名検索（登録済みスポットからの絞り込み。全角半角・大小文字の違いを吸収）
+  const normalize = (s: string) => s.normalize("NFKC").toLowerCase();
+  const searchResults = useMemo(() => {
+    const q = normalize(query.trim());
+    if (!q) return null;
+    return places
+      .filter((p) => normalize(`${p.name} ${p.city} ${p.pref}`).includes(q))
+      .slice(0, 20);
+  }, [query]);
 
   const post = useCallback(
     async (heard: boolean) => {
@@ -255,16 +266,59 @@ export default function App() {
       >
         {!selected && (
           <>
+            {/* 地点名検索（つなぎ実装。UI再設計後は案Bの検索に置き換わる） */}
+            <div className="relative mb-2">
+              <input
+                type="search"
+                className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pl-3 pr-10 text-base"
+                placeholder="地点名で探す（例: 見沼、高尾）"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="地点名で探す"
+              />
+              {query && (
+                <button
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-base leading-none text-slate-400"
+                  onClick={() => setQuery("")}
+                  aria-label="検索をクリア"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <h2 className="mb-2 text-sm font-bold text-slate-800">
-              {userPos ? "近くのおすすめ" : "いま期待できる場所"}
-              {!userPos && (
-                <span className="ml-2 font-normal text-slate-500">
-                  （地図右上の◎ボタンで現在地を使えます）
-                </span>
+              {searchResults ? (
+                <>
+                  「{query.trim()}」で {searchResults.length} 件
+                </>
+              ) : (
+                <>
+                  {userPos ? "近くのおすすめ" : "いま期待できる場所"}
+                  {!userPos && (
+                    <span className="ml-2 font-normal text-slate-500">
+                      （地図右上の◎ボタンで現在地を使えます）
+                    </span>
+                  )}
+                </>
               )}
             </h2>
+            {searchResults && searchResults.length === 0 && (
+              <p className="py-4 text-sm text-slate-500">
+                見つかりませんでした。別の言い方で探すか、地図から選んでください。
+                （登録のない場所には今は投稿できません）
+              </p>
+            )}
             <ul className="divide-y divide-slate-100">
-              {recommended.map(({ place, stats, dist }) => (
+              {(searchResults
+                ? searchResults.map((place) => ({
+                    place,
+                    stats: statsById[place.id],
+                    dist: userPos
+                      ? distanceKm(userPos.lat, userPos.lng, place.lat, place.lng)
+                      : null,
+                  }))
+                : recommended
+              ).map(({ place, stats, dist }) => (
                 <li key={place.id}>
                   <button
                     className="flex w-full items-center justify-between py-2 text-left"
