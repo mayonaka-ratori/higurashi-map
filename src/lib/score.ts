@@ -1,4 +1,6 @@
-import type { Report } from "./types";
+import type { Place, Report } from "./types";
+
+type ExternalRecord = NonNullable<Place["externalRecord"]>;
 
 export type Freshness = "today" | "recent3d" | "season" | "none";
 
@@ -34,10 +36,49 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+// シーズン開始日（6月1日）。store.ts と同じ定義
+function seasonStartOf(now: Date): Date {
+  const june1 = new Date(now.getFullYear(), 5, 1);
+  return now >= june1 ? june1 : new Date(now.getFullYear() - 1, 5, 1);
+}
+
+// 外部記録の日付を解釈する。今シーズン外・未来・形式不正は null
+function parseExternal(
+  rec: ExternalRecord,
+  now: Date
+): { kind: "exact"; daysAgo: number } | { kind: "monthOnly" } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2}|XX)$/.exec(rec.date);
+  if (!m) return null;
+  const season0 = seasonStartOf(now);
+  if (m[3] === "XX") {
+    const monthStart = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+    if (monthStart < season0 || monthStart > now) return null;
+    return { kind: "monthOnly" };
+  }
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (d < season0 || startOfDay(d) > startOfDay(now)) return null;
+  const daysAgo = Math.round(
+    (startOfDay(now).getTime() - startOfDay(d).getTime()) / DAY
+  );
+  return { kind: "exact", daysAgo };
+}
+
+const FRESHNESS_RANK: Record<Freshness, number> = {
+  none: 0,
+  season: 1,
+  recent3d: 2,
+  today: 3,
+};
+
 // 仕様書のルールベース期待度をそのまま実装したもの。
 // 30分以内+30 / 3時間以内+10 / 24時間以内+5 / 複数人確認+20 /
 // GPS高精度+10 / 聞こえなかった-5
-export function placeStats(reports: Report[], now: Date): PlaceStats {
+// 外部記録は底上げのみ: 3日以内+10 / シーズン内+5（外部記録だけでは★2まで）
+export function placeStats(
+  reports: Report[],
+  now: Date,
+  external?: ExternalRecord
+): PlaceStats {
   const sorted = [...reports].sort((a, b) =>
     b.created_at.localeCompare(a.created_at)
   );
@@ -66,6 +107,22 @@ export function placeStats(reports: Report[], now: Date): PlaceStats {
   ) {
     score += 10;
   }
+  // 外部サイトの記録による底上げ（アプリ投稿ゼロでも指針を出すため）
+  let extFreshness: Freshness = "none";
+  const ext = external ? parseExternal(external, now) : null;
+  if (ext) {
+    if (ext.kind === "exact" && ext.daysAgo <= 0) {
+      score += 10;
+      extFreshness = "today";
+    } else if (ext.kind === "exact" && ext.daysAgo <= 3) {
+      score += 10;
+      extFreshness = "recent3d";
+    } else {
+      score += 5;
+      extFreshness = "season";
+    }
+  }
+
   const quietIn3h = sorted.filter(
     (r) => !r.heard && now.getTime() - Date.parse(r.created_at) <= 3 * HOUR
   );
@@ -81,6 +138,9 @@ export function placeStats(reports: Report[], now: Date): PlaceStats {
     if (t >= today0) freshness = "today";
     else if (t >= today0 - 3 * DAY) freshness = "recent3d";
     else freshness = "season";
+  }
+  if (FRESHNESS_RANK[extFreshness] > FRESHNESS_RANK[freshness]) {
+    freshness = extFreshness;
   }
 
   return {

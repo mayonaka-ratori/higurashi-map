@@ -104,7 +104,7 @@ export default function App() {
   const statsById = useMemo(() => {
     const m: Record<string, ReturnType<typeof placeStats>> = {};
     for (const p of places) {
-      m[p.id] = placeStats(reportsByPlace.get(p.id) ?? [], now);
+      m[p.id] = placeStats(reportsByPlace.get(p.id) ?? [], now, p.externalRecord);
     }
     return m;
   }, [reportsByPlace, now]);
@@ -347,7 +347,15 @@ export default function App() {
                       <span className="block text-xs text-slate-500">
                         {stats.lastHeardAt
                           ? `最終確認 ${timeText(stats.lastHeardAt, now)}`
-                          : "今シーズン記録なし"}
+                          : place.externalRecord
+                            ? `外部の記録 ${place.externalRecord.date.replace(
+                                /^\d{4}-(\d{2})-(\d{2}|XX)$/,
+                                (_, m2, d2) =>
+                                  d2 === "XX"
+                                    ? `${Number(m2)}月`
+                                    : `${Number(m2)}/${Number(d2)}`
+                              )}`
+                            : "今シーズン記録なし"}
                       </span>
                     </span>
                   </button>
@@ -385,7 +393,9 @@ export default function App() {
               <span className="text-xs text-slate-600">
                 {selectedStats.lastHeardAt
                   ? `最終確認 ${timeText(selectedStats.lastHeardAt, now)}`
-                  : "今シーズンの確認はまだありません"}
+                  : selected.externalRecord
+                    ? "アプリへの投稿はまだありません"
+                    : "今シーズンの確認はまだありません"}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
