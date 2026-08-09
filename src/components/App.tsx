@@ -402,7 +402,7 @@ export default function App() {
                 )}
                 {selected.externalRecord.time !== "不明" &&
                   ` ${selected.externalRecord.time}`}
-                、ヒグラシの声が聞こえたという記録があります。
+                、ヒグラシが確認されたという記録があります。
                 <a
                   className="ml-1 text-sky-600 underline"
                   href={selected.externalRecord.url}

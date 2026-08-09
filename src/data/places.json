@@ -68,7 +68,7 @@
   { "id": "urayama-dam", "name": "浦山ダム（秩父さくら湖）", "pref": "埼玉県", "city": "秩父市", "lat": 35.93749, "lng": 139.06014 },
   { "id": "mitsumine", "name": "三峯神社", "pref": "埼玉県", "city": "秩父市", "lat": 35.92572, "lng": 138.92987, "externalRecord": { "date": "2026-08-XX", "time": "不明", "source": "井口鉱油スタッフブログ「秩父にいきました」", "url": "https://www.iguchi-kouyu.co.jp/blg/asaka_shop/watanabes-13876.html" } },
   { "id": "nakatsukyo", "name": "中津峡", "pref": "埼玉県", "city": "秩父市", "lat": 35.937, "lng": 138.869 },
-  { "id": "kenmin-no-mori", "name": "埼玉県民の森", "pref": "埼玉県", "city": "横瀬町", "lat": 35.99414, "lng": 139.1552 },
+  { "id": "kenmin-no-mori", "name": "埼玉県民の森", "pref": "埼玉県", "city": "横瀬町", "lat": 35.99414, "lng": 139.1552, "externalRecord": { "date": "2026-07-25", "time": "日中", "source": "個人ブログ「天地（あめつち）に遊ぶ」記事「美の山・丸山」", "url": "https://yamasakuran.seesaa.net/article/521225671.html" } },
   { "id": "higashi-gyoen", "name": "皇居東御苑", "pref": "東京都", "city": "千代田区", "lat": 35.68647, "lng": 139.75719 },
   { "id": "shizen-kyoiku", "name": "国立科学博物館附属自然教育園", "pref": "東京都", "city": "港区", "lat": 35.63852, "lng": 139.71989 },
   { "id": "arisugawa", "name": "有栖川宮記念公園", "pref": "東京都", "city": "港区", "lat": 35.65226, "lng": 139.72578 },
