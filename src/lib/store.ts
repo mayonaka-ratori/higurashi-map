@@ -84,7 +84,7 @@ export async function insertReport(r: NewReport): Promise<void> {
     list.push({
       ...r,
       id: `local-${Date.now()}`,
-      created_at: new Date().toISOString(),
+      created_at: r.created_at ?? new Date().toISOString(),
     });
     localStorage.setItem(DEMO_KEY, JSON.stringify(list));
     return;

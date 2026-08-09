@@ -1,26 +1,80 @@
 @import "tailwindcss";
 
+/* 画面は屋外の夕暮れで読むもの。端末のダークモードで色を反転させない */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: #eef2f6;
+  color: #0f172a;
+  font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+    Meiryo, sans-serif;
+}
+
+/* 今日のピンにだけ出す波紋。地図のDOMマーカーとして重ねる */
+.hig-pulse {
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: #059669;
+  animation: higPulse 2.4s ease-out infinite;
+}
+
+@keyframes higPulse {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@keyframes higRise {
+  0% {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes higFade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+  }
+}
+
+/* スマホはズーム・現在地のコントロールを出さず、自前の◎ボタンから呼ぶ */
+.hig-map-sp .maplibregl-ctrl-bottom-left {
+  display: none;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6dbd9;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }

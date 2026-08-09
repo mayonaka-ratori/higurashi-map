@@ -24,9 +24,14 @@ export type PlaceStats = {
   stars: number; // 0〜5
   freshness: Freshness;
   lastHeardAt: Date | null;
+  heardIn3hCount: number;
+  quietIn3hCount: number;
   todayReports: Report[]; // 今日の全投稿（新しい順）
+  todayHeardCount: number;
   yesterdayHeardCount: number;
   seasonHeardCount: number;
+  // 外部サイトの記録を一行で言ったもの（例:「外部の記録 8/1」）。無ければ null
+  externalLabel: string | null;
 };
 
 const MIN = 60 * 1000;
@@ -130,6 +135,16 @@ export function placeStats(
   score -= Math.min(quietIn3h.length * 5, 15);
   score = Math.max(score, 0);
 
+  // 外部記録しかない場所で「今シーズンの記録なし」と言ってしまわないための一行
+  const externalLabel =
+    ext && external
+      ? `外部の記録 ${external.date.replace(
+          /^\d{4}-(\d{2})-(\d{2}|XX)$/,
+          (_, m2, d2) =>
+            d2 === "XX" ? `${Number(m2)}月` : `${Number(m2)}/${Number(d2)}`
+        )}`
+      : null;
+
   const stars =
     score >= 55 ? 5 : score >= 35 ? 4 : score >= 20 ? 3 : score >= 10 ? 2 : score > 0 ? 1 : 0;
 
@@ -149,17 +164,85 @@ export function placeStats(
     stars,
     freshness,
     lastHeardAt,
+    heardIn3hCount: heardIn3h.length,
+    quietIn3hCount: quietIn3h.length,
     todayReports: sorted.filter((r) => Date.parse(r.created_at) >= today0),
+    todayHeardCount: heard.filter((r) => Date.parse(r.created_at) >= today0)
+      .length,
     yesterdayHeardCount: heard.filter((r) => {
       const t = Date.parse(r.created_at);
       return t >= yesterday0 && t < today0;
     }).length,
     seasonHeardCount: heard.length,
+    externalLabel,
   };
 }
 
-export function starsText(stars: number): string {
-  return "★".repeat(stars) + "☆".repeat(5 - stars);
+// 期待度の単位。点いた分だけ出し、0件のときは何も出さない。
+// 空の記号を並べるとレビュー点数に見えるため（handoff-v2 ①）
+export function notesText(n: number): string {
+  return n > 0 ? "♪".repeat(n) : "";
+}
+
+export function notesLabel(n: number): string {
+  if (n >= 5) return "よく鳴いている";
+  if (n >= 4) return "鳴いている";
+  if (n >= 3) return "たぶん鳴く";
+  if (n >= 2) return "望みはある";
+  if (n >= 1) return "わずか";
+  return "記録なし";
+}
+
+// 期待度が何を根拠に立っているかを一行で言う。加点の主役だけを出す。
+export function reasonText(s: PlaceStats, now: Date): string {
+  if (!s.lastHeardAt) return s.externalLabel ?? "今シーズンの記録なし";
+  const head = heardHead(s.lastHeardAt, now);
+  let t =
+    s.heardIn3hCount >= 2
+      ? `${head}・3時間で${s.heardIn3hCount}件`
+      : head;
+  if (s.quietIn3hCount > 0) t += `・静かだった ${s.quietIn3hCount}件`;
+  return t;
+}
+
+// 「8分前に確認」。直後だけは「たった今に確認」にならないよう分ける
+function heardHead(at: Date, now: Date): string {
+  const ago = agoText(at, now);
+  return ago === "たった今" ? "たった今確認" : `${ago}に確認`;
+}
+
+// 狭いカードに入れる短い根拠。いつ聞こえたかだけを言う
+export function shortReason(s: PlaceStats, now: Date): string {
+  if (!s.lastHeardAt) return s.externalLabel ?? "記録なし";
+  return heardHead(s.lastHeardAt, now);
+}
+
+// おすすめ順。期待度そのままだと「♪5だが80km先」が1位になるので、
+// 1kmにつき0.5点（最大30点）引いて「行ける距離か」を効かせる。期待度の値は変えない。
+export function rankScore(
+  s: PlaceStats,
+  distKm: number | null,
+  weight = 0.5
+): number {
+  if (distKm == null) return s.score;
+  return s.score - Math.min(distKm, 60) * weight;
+}
+
+export function hm(d: Date): string {
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// 「8分前」「2時間前」。いつの話かを一目で分かるようにする短い表記
+export function agoText(d: Date, now: Date): string {
+  const m = Math.round((now.getTime() - d.getTime()) / MIN);
+  if (m < 1) return "たった今";
+  if (m < 60) return `${m}分前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}時間前`;
+  const days = Math.floor(
+    (startOfDay(now).getTime() - startOfDay(d).getTime()) / DAY
+  );
+  return days === 1 ? "昨日" : `${days}日前`;
 }
 
 export function timeText(d: Date, now: Date): string {

@@ -1,4 +1,4 @@
-// デザイン参照実装（docs/design-handoff/design/）をローカルサーバーで開けるようにする。
+// デザイン参照実装（docs/design-handoff-v2/design/）をローカルサーバーで開けるようにする。
 // 使い方: npm run design
 //
 // HTMLを file:// で直接開くと、中の fetch("data/places.json") と
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, extname, join, normalize, sep } from "node:path";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const docRoot = join(root, "docs", "design-handoff", "design");
+const docRoot = join(root, "docs", "design-handoff-v2", "design");
 const port = Number(process.env.PORT) || 4321;
 
 const TYPES = {
@@ -53,8 +53,8 @@ const server = createServer((req, res) => {
 });
 
 server.listen(port, () => {
-  console.log("デザイン参照実装を配信中。ブラウザで開くこと:");
-  console.log(`  再設計案（案B）  http://localhost:${port}/再設計案.dc.html`);
-  console.log(`  現行UI（比較用）  http://localhost:${port}/現行UI.dc.html`);
+  console.log("デザイン参照実装（案4「今夜の答え」）を配信中。ブラウザで開くこと:");
+  console.log(`  PC      http://localhost:${port}/plan4-answer.dc.html`);
+  console.log(`  スマホ   http://localhost:${port}/plan4-answer-sp.dc.html`);
   console.log("止めるときは Ctrl+C。");
 });

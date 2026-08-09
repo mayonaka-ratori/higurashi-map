@@ -33,4 +33,7 @@ export type NewReport = {
   longitude: number | null;
   accuracy: number | null;
   comment: string | null;
+  // 「さっき聞いた分」を後から記録するときだけ入れる。
+  // 省略するとDB側の now() が入る（その場で聞いた分の通常投稿）
+  created_at?: string;
 };

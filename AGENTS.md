@@ -43,21 +43,27 @@ DM / ランキング / ポイント / バッジ / ゲーミフィケーション
 コマンド: `npm run dev`（開発）/ `npm run build`（本番ビルド）/ `npm run validate:places`（スポットデータ検査）/
 `npm run design`（デザイン参照実装をブラウザで開く）
 
-## 地図UIの再設計（画面に触る前に必ず読む）
+## 地図UIの決まり（画面に触る前に必ず読む）
 
-地図画面の再設計は **仕様も参照実装も確定していて、まだ実装されていない**。
-`src/components/App.tsx` / `MapView.tsx` / `src/lib/score.ts` に手を入れる前に
-[docs/design-handoff/README.md](docs/design-handoff/README.md)（確定仕様。色・寸法・文言まで数値で入っている）と
-[docs/design-handoff/実装手順.md](docs/design-handoff/実装手順.md)（着手順）を読むこと。
-自分で見た目を考え直さない。数値はそのまま使う。
+いま画面に出ているのは案4「今夜の答え」。
+仕様は [docs/design-handoff-v2/README.md](docs/design-handoff-v2/README.md) にある
+（色・寸法・文言まで数値で入っている）。
+`src/components/App.tsx` / `AnswerBlock.tsx` / `DayRail.tsx` / `PlaceDetail.tsx` /
+`QuickPostSheet.tsx` / `MapView.tsx` / `src/lib/score.ts` / `sun.ts` に手を入れる前に読むこと。
+自分で見た目を考え直さない。数値はそのまま使う。色は [src/lib/design.ts](src/lib/design.ts) にまとめてある。
+
+**やめた案がある。** 案B「探して選ぶ」（[docs/design-handoff/](docs/design-handoff/)）は
+実装前のレビューで落とした。理由は v2 の README「案Bをやめた理由」にある。
+v1 を残してあるのは**地図の仕様（鮮度4段階・ピン半径・リング）がそこにしか書いていない**ため。
+それ以外を v1 から拾わないこと。
 
 参照実装は `npm run design` で開ける（`file://` で直接開くと真っ白になる。
 React と Leaflet を CDN から読むのでインターネット接続も要る）。
 参照実装は **Leaflet** で書かれているが、実装先は **MapLibre GL**。
 Leafletのコードを持ち込まないこと（理由と対応表はハンドオフのREADMEにある）。
 
-現行UIには**つなぎの地点名検索**が入っている（App.tsx内、コメントで明示）。
-案Bの検索を実装するとき、これは残さず置き換えること。
+画面のどこにも **★ を出さない**。期待度は ♪ で表す（`notesText`）。
+文字は **11px を下回らない**。夕暮れに屋外で読む画面だから。
 
 ## 落とし穴（過去に実際に踏んだもの。壊さないこと）
 
@@ -68,6 +74,15 @@ Leafletのコードを持ち込まないこと（理由と対応表はハンド�
 2. **MapLibreは地図コンテナに `position: relative` を強制する**。
    コンテナに Tailwind の `absolute inset-0` を使うと上書きされて高さ0になる。
    `h-full w-full` で大きさを与えること（[src/components/MapView.tsx](src/components/MapView.tsx)）。
+3. **地点名ラベルのズーム閾値は `minzoom` で切る。** `text-field` に
+   `["step", ["zoom"], "", 9.8, ...]` と書いても、レイアウトの再評価が整数ズームでしか
+   起きないので 9.8 の境目が効かない（実際にズーム8.5でもラベルが出続けた）。
+4. **地図スタイルに `glyphs` を置いていない。** 置かないと MapLibre は全文字を
+   ブラウザ側で描くので、外部のグリフサーバーが要らない。日本語の見た目は
+   `localIdeographFontFamily` で指定している。`glyphs` を足すと経路が変わるので注意。
+5. **タブが非表示だと地図は永久に描画されない。** MapLibre は `requestAnimationFrame` で
+   描くため、バックグラウンドのタブでは `load` すら発火せずピンが1つも出ない。
+   動作確認するときは**そのタブを必ず前面にすること**。コードの不具合と間違えやすい。
 
 ## スポットデータ（places.json）の決まり
 

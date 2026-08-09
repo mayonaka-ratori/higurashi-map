@@ -4,11 +4,12 @@
 これ1枚で背景が分かるように書いてある。着手前に [VISION.md](VISION.md) と
 [AGENTS.md](../AGENTS.md) の「落とし穴」も読むこと。
 
-> **このブリーフには回答が出ている。**
-> デザイン側の成果物は [docs/design-handoff/](design-handoff/) にある（案B「探して選ぶ」を採用）。
-> 色・寸法・文言まで確定した仕様と、ブラウザで動く参照実装が入っている。
-> **これから実装する人は、この文書ではなく [design-handoff/README.md](design-handoff/README.md) と
-> [design-handoff/実装手順.md](design-handoff/実装手順.md) を見ること。**
+> **このブリーフには回答が出ていて、実装も済んでいる。**
+> 採用したのは案4「今夜の答え」。仕様は [docs/design-handoff-v2/](design-handoff-v2/) にある。
+> 最初に採った案B「探して選ぶ」（[docs/design-handoff/](design-handoff/)）は実装前のレビューで落とした。
+> 理由は design-handoff-v2/README.md の「案Bをやめた理由」にある。
+> **画面に手を入れる人は、この文書ではなく
+> [design-handoff-v2/README.md](design-handoff-v2/README.md) を見ること。**
 > こちらは「なぜそう決めたか」を残すための依頼側の記録。
 
 ## 製品の芯（デザインの出発点）

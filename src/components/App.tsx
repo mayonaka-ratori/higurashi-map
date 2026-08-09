@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+// 画面はひとつの問いにだけ答える —「今日、どこへ行けば聞けるか」。
+// 断定できる根拠がある日は地点名を一つ出し、無い日は別の画面に切り替える。
+// 設計の根拠は docs/design-handoff-v2/README.md にある。数値はそこから持ってくること。
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import placesJson from "@/data/places.json";
 import type { Place, Report } from "@/lib/types";
@@ -12,25 +15,31 @@ import {
   markPosted,
 } from "@/lib/store";
 import {
-  FRESHNESS_COLOR,
-  FRESHNESS_LABEL,
-  placeStats,
-  starsText,
-  timeText,
   distanceKm,
-  type Freshness,
+  hm,
+  notesLabel,
+  notesText,
+  placeStats,
+  rankScore,
+  reasonText,
+  type PlaceStats,
 } from "@/lib/score";
-import { sunsetText } from "@/lib/sun";
+import { listeningWindows, type ListeningState } from "@/lib/sun";
+import { C, dotStyle, notesStyle } from "@/lib/design";
+import { placeLineText, type AnswerVM, type PostState, type Ranked } from "@/lib/view";
+import DayRail from "./DayRail";
+import AnswerBlock from "./AnswerBlock";
+import PlaceDetail from "./PlaceDetail";
+import QuickPostSheet, { type LaterAt } from "./QuickPostSheet";
+import type { MapHandle } from "./MapView";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
 const places = placesJson as Place[];
 
-type PostState =
-  | { kind: "idle" }
-  | { kind: "sending" }
-  | { kind: "done"; heard: boolean }
-  | { kind: "error"; message: string };
+// 現在地が取れないときの日の入り計算の基準（埼玉南部）。
+// 関東の中なら数分しか変わらないので、聞きどきの目安には足りる
+const FALLBACK_ORIGIN = { lat: 35.83, lng: 139.55 };
 
 // 端末のGPSを取る。取れなくても投稿は続ける（精度情報なし扱い）
 function getPosition(): Promise<GeolocationPosition | null> {
@@ -53,26 +62,65 @@ function xShareUrl(place: Place, heard: boolean): string {
   return `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`;
 }
 
+// 「さっき聞いた分」の時刻。朝と夕は実際の夜明け・日の入りに合わせる
+function laterTime(t: LaterAt, now: Date, win: ListeningState | null): Date {
+  if (t === "さっき") return new Date(now.getTime() - 15 * 60000);
+  if (t === "1時間前") return new Date(now.getTime() - 60 * 60000);
+  if (t === "今朝") {
+    const dawn =
+      win?.dawn ??
+      new Date(now.getFullYear(), now.getMonth(), now.getDate(), 5, 0);
+    return dawn > now ? now : dawn;
+  }
+  const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  y.setHours(win ? win.dusk.getHours() : 18, win ? win.dusk.getMinutes() : 30, 0, 0);
+  return y;
+}
+
 export default function App() {
   const [reports, setReports] = useState<Report[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const [loadError, setLoadError] = useState(false);
 
-  // 共有リンク（?place=地点ID）で開かれたら、その地点を選択状態にする。
-  // サーバー側の描画と食い違わないよう、表示後に読み取る。
+  const [variant, setVariant] = useState<"pc" | "sp">("sp");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [hoverPt, setHoverPt] = useState<{ x: number; y: number } | null>(null);
+  const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<"reco" | "near">("reco");
+  const [postState, setPostState] = useState<PostState>({ kind: "idle" });
+  const [comment, setComment] = useState("");
+  const [showComment, setShowComment] = useState(false);
+  const [quick, setQuick] = useState<"now" | "later" | null>(null);
+  const [laterAt, setLaterAt] = useState<LaterAt>("さっき");
+
+  const mapRef = useRef<MapHandle | null>(null);
+  const lastPost = useRef<{ heard: boolean; placeId: string; at?: Date } | null>(
+    null
+  );
+
+  const pc = variant === "pc";
+
+  // 画面幅で組み方を変える。PCは右パネル、それ以外は下端のカード。
+  // 端末の回転やウィンドウの拡縮でも切り替わるよう resize も見る
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setVariant(mq.matches ? "pc" : "sp");
+    apply();
+    mq.addEventListener("change", apply);
+    window.addEventListener("resize", apply);
+    return () => {
+      mq.removeEventListener("change", apply);
+      window.removeEventListener("resize", apply);
+    };
+  }, []);
+
+  // 共有リンク（?place=地点ID）で開かれたら、その地点を選択状態にする
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("place");
     if (id && places.some((p) => p.id === id)) setSelectedId(id);
   }, []);
-  const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(
-    null
-  );
-  const [postState, setPostState] = useState<PostState>({ kind: "idle" });
-  const [query, setQuery] = useState("");
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [comment, setComment] = useState("");
-  const [showComment, setShowComment] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [now, setNow] = useState(() => new Date());
 
   const reload = useCallback(async () => {
     try {
@@ -91,90 +139,190 @@ export default function App() {
     return () => clearInterval(t);
   }, [reload]);
 
-  const reportsByPlace = useMemo(() => {
-    const m = new Map<string, Report[]>();
-    for (const r of reports) {
-      const list = m.get(r.place_id);
-      if (list) list.push(r);
-      else m.set(r.place_id, [r]);
-    }
-    return m;
-  }, [reports]);
-
   const statsById = useMemo(() => {
-    const m: Record<string, ReturnType<typeof placeStats>> = {};
+    const byPlace = new Map<string, Report[]>();
+    for (const r of reports) {
+      const list = byPlace.get(r.place_id);
+      if (list) list.push(r);
+      else byPlace.set(r.place_id, [r]);
+    }
+    const m: Record<string, PlaceStats> = {};
     for (const p of places) {
-      m[p.id] = placeStats(reportsByPlace.get(p.id) ?? [], now, p.externalRecord);
+      m[p.id] = placeStats(byPlace.get(p.id) ?? [], now, p.externalRecord);
     }
     return m;
-  }, [reportsByPlace, now]);
+  }, [reports, now]);
 
-  const freshnessById = useMemo(() => {
-    const m: Record<string, Freshness> = {};
-    for (const p of places) m[p.id] = statsById[p.id].freshness;
-    return m;
-  }, [statsById]);
+  const win = useMemo(
+    () =>
+      listeningWindows(
+        now,
+        userPos?.lat ?? FALLBACK_ORIGIN.lat,
+        userPos?.lng ?? FALLBACK_ORIGIN.lng
+      ),
+    [now, userPos]
+  );
 
-  // おすすめ: 現在地があれば「近くて期待度の高い順」、なければ「期待度の高い順」
-  const recommended = useMemo(() => {
-    const scored = places.map((p) => {
-      const s = statsById[p.id];
-      const dist = userPos
-        ? distanceKm(userPos.lat, userPos.lng, p.lat, p.lng)
-        : null;
-      return { place: p, stats: s, dist };
-    });
-    scored.sort((a, b) => {
-      if (a.dist != null && b.dist != null) {
-        // 期待度を優先しつつ、同点なら近い順
-        if (b.stats.score !== a.stats.score) return b.stats.score - a.stats.score;
-        return a.dist - b.dist;
-      }
-      if (b.stats.score !== a.stats.score) return b.stats.score - a.stats.score;
-      return (
-        (b.stats.lastHeardAt?.getTime() ?? 0) -
-        (a.stats.lastHeardAt?.getTime() ?? 0)
+  // 今日届いた報告（全地点ぶん）。時間帯レールに点で打つ
+  const todayReports = useMemo(() => {
+    const today0 = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    ).getTime();
+    return reports
+      .filter((r) => Date.parse(r.created_at) >= today0)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }, [reports, now]);
+
+  // 現在地が無いあいだは「近い順」を名乗れないので、おすすめ順のまま出す
+  const effSort = userPos ? sort : "reco";
+
+  const ranked = useMemo<Ranked[]>(() => {
+    const out = places.map((p) => ({
+      p,
+      s: statsById[p.id],
+      d: userPos ? distanceKm(userPos.lat, userPos.lng, p.lat, p.lng) : null,
+    }));
+    if (effSort === "near") {
+      out.sort(
+        (a, b) => (a.d ?? 0) - (b.d ?? 0) || b.s.score - a.s.score
       );
-    });
-    return scored.slice(0, 5);
-  }, [statsById, userPos]);
+    } else {
+      out.sort(
+        (a, b) =>
+          rankScore(b.s, b.d) - rankScore(a.s, a.d) || (a.d ?? 0) - (b.d ?? 0)
+      );
+    }
+    return out;
+  }, [statsById, userPos, effSort]);
 
-  const selected = selectedId
-    ? places.find((p) => p.id === selectedId) ?? null
-    : null;
+  // 答え・候補・見出しはここで一緒に決める。画面が嘘をつかないように、
+  // 実績のない行を「実績のある場所」の下に置かない
+  const todayOnes = ranked.filter((r) => r.s.freshness === "today");
+  const answer =
+    todayOnes.length > 0 && todayOnes[0].s.stars >= 3 ? todayOnes[0] : null;
+  const others = ranked.filter((r) => !answer || r.p.id !== answer.p.id);
+  const othersWithRecord = others.filter((r) => r.s.freshness !== "none");
+  const restHasRecords = othersWithRecord.length > 0;
+  const restPool = (restHasRecords ? othersWithRecord : others).slice(
+    0,
+    pc ? 5 : 6
+  );
 
-  // 地点名検索（登録済みスポットからの絞り込み。全角半角・大小文字の違いを吸収）
+  const vm = useMemo<AnswerVM>(() => {
+    const nearWord = userPos ? "を近い順に" : "を";
+    if (answer) {
+      const c = answer.s.todayReports.find((r) => r.heard && r.comment)?.comment;
+      return {
+        isEmpty: false,
+        kicker: win?.active?.kind === "dawn" ? "今朝はここ" : "今夜はここ",
+        headline: answer.p.name,
+        placeLine: placeLineText(answer, "ここから "),
+        notes: notesText(answer.s.stars),
+        notesLabel: `期待度・${notesLabel(answer.s.stars)}`,
+        reason: reasonText(answer.s, now),
+        comment: c ? `「${c}」` : null,
+        emptyLead: null,
+        openLabel: "この場所を見る",
+        restTitle: restHasRecords ? "ほかの候補" : "近くの場所",
+        footnote:
+          "近さも考えに入れて並べています。♪ は「どれだけ鳴いていそうか」の目安です。",
+      };
+    }
+    const heardToday = todayReports.filter((r) => r.heard).length;
+    const emptyLead = todayOnes.length
+      ? `今日届いているのは ${heardToday} 件だけです。下は実績のある場所${nearWord}出しています。`
+      : !restHasRecords
+        ? userPos
+          ? "下は現在地から近い場所です。行って聞こえたら、その場で教えてください。"
+          : "下はいま期待できる場所です。行って聞こえたら、その場で教えてください。"
+        : win?.daytime
+          ? "曇りの日や暗い林なら日中でも鳴きます。下は今シーズン鳴いた実績のある場所です。"
+          : `夜明けと日の入りの前後30分が聞きどきです。下は実績のある場所${nearWord}出しています。`;
+    return {
+      isEmpty: true,
+      kicker: "きょうの状況",
+      headline: todayOnes.length
+        ? "確かなことは、まだ言えません"
+        : "今日はまだ誰も聞いていません",
+      placeLine: null,
+      notes: "",
+      notesLabel: "",
+      reason: "",
+      comment: null,
+      emptyLead,
+      openLabel: "近い順にならべる",
+      restTitle: restHasRecords ? "実績のある場所" : "近くの場所",
+      footnote:
+        "今日の一件目になれます。聞こえなかったときも「静かだった」を押すと、次の人の役に立ちます。",
+    };
+  }, [answer, todayOnes.length, restHasRecords, todayReports, win, now, userPos]);
+
   const normalize = (s: string) => s.normalize("NFKC").toLowerCase();
   const searchResults = useMemo(() => {
     const q = normalize(query.trim());
     if (!q) return null;
-    return places
-      .filter((p) => normalize(`${p.name} ${p.city} ${p.pref}`).includes(q))
-      .slice(0, 20);
-  }, [query]);
+    return ranked
+      .filter((r) => normalize(`${r.p.name} ${r.p.city} ${r.p.pref}`).includes(q))
+      .slice(0, 8);
+  }, [query, ranked]);
 
-  const post = useCallback(
-    async (heard: boolean) => {
-      if (!selected) return;
-      if (isThrottled(selected.id)) {
+  const nearest3 = useMemo(
+    () =>
+      userPos
+        ? [...ranked].sort((a, b) => (a.d ?? 0) - (b.d ?? 0)).slice(0, 3)
+        : ranked.slice(0, 3),
+    [ranked, userPos]
+  );
+
+  const selected = selectedId
+    ? (places.find((p) => p.id === selectedId) ?? null)
+    : null;
+  const selectedRanked = selected
+    ? (ranked.find((r) => r.p.id === selected.id) ?? null)
+    : null;
+
+  const selectPlace = useCallback((id: string | null) => {
+    setSelectedId(id);
+    setPostState({ kind: "idle" });
+    setShowComment(false);
+    setComment("");
+    setQuick(null);
+    setQuery("");
+  }, []);
+
+  const doPost = useCallback(
+    async (opts: {
+      heard: boolean;
+      placeId: string;
+      at?: Date;
+      withComment: boolean;
+    }) => {
+      const { heard, placeId, at, withComment } = opts;
+      lastPost.current = { heard, placeId, at };
+      if (isThrottled(placeId)) {
         setPostState({
           kind: "error",
+          heard,
           message: "同じ場所への投稿は2分あけてください。",
         });
         return;
       }
-      setPostState({ kind: "sending" });
+      setPostState({ kind: "sending", heard });
       const pos = await getPosition();
+      const text = withComment && comment.trim() ? comment.trim().slice(0, 200) : null;
       try {
         await insertReport({
-          place_id: selected.id,
+          place_id: placeId,
           heard,
           latitude: pos?.coords.latitude ?? null,
           longitude: pos?.coords.longitude ?? null,
           accuracy: pos?.coords.accuracy ?? null,
-          comment: comment.trim() ? comment.trim().slice(0, 200) : null,
+          comment: text,
+          created_at: at ? at.toISOString() : undefined,
         });
-        markPosted(selected.id);
+        markPosted(placeId);
         setComment("");
         setShowComment(false);
         setPostState({ kind: "done", heard });
@@ -182,337 +330,591 @@ export default function App() {
       } catch {
         setPostState({
           kind: "error",
-          message: "送信に失敗しました。通信環境を確認してもう一度お試しください。",
+          heard,
+          message: "通信環境を確認して、もう一度お試しください。",
         });
       }
     },
-    [selected, comment, reload]
+    [comment, reload]
   );
 
-  const selectPlace = useCallback((id: string | null) => {
-    setSelectedId(id);
-    setPostState({ kind: "idle" });
-  }, []);
+  const openQuick = useCallback(
+    async (mode: "now" | "later") => {
+      setQuick(mode);
+      if (!userPos) {
+        const p = await getPosition();
+        if (p) setUserPos({ lat: p.coords.latitude, lng: p.coords.longitude });
+      }
+    },
+    [userPos]
+  );
 
-  const sunset = sunsetText(now, userPos?.lat ?? 35.86, userPos?.lng ?? 139.55);
-  const selectedStats = selected ? statsById[selected.id] : null;
+  // 押した時点で記録する。完了カードはその地点の詳細に出す
+  const quickPost = useCallback(
+    (placeId: string) => {
+      const at = quick === "later" ? laterTime(laterAt, now, win) : undefined;
+      setQuick(null);
+      setQuery("");
+      setSelectedId(placeId);
+      doPost({ heard: true, placeId, at, withComment: false });
+    },
+    [quick, laterAt, now, win, doPost]
+  );
+
+  const onSort = useCallback(
+    (s: "reco" | "near") => {
+      setSort(s);
+      if (s === "near" && !userPos) mapRef.current?.locate();
+    },
+    [userPos]
+  );
+
+  const hoverPlace = hoverId ? places.find((p) => p.id === hoverId) : null;
+  const hoverStats = hoverId ? statsById[hoverId] : null;
+
+  // ── ここから画面
+
+  const header = (
+    <div
+      style={{
+        flex: "none",
+        display: "flex",
+        alignItems: pc ? "center" : "baseline",
+        gap: pc ? 14 : 8,
+        background: C.headerBg,
+        color: C.onDark,
+        padding: pc ? "10px 20px" : "11px 14px 9px",
+        paddingTop: pc
+          ? "calc(10px + env(safe-area-inset-top))"
+          : "calc(11px + env(safe-area-inset-top))",
+      }}
+    >
+      <h1
+        style={{
+          margin: 0,
+          fontSize: 15,
+          fontWeight: 700,
+          letterSpacing: pc ? ".03em" : ".02em",
+        }}
+      >
+        ひぐらしのなくところに
+      </h1>
+      {pc ? (
+        <span style={{ fontSize: 11, color: C.onDarkSub }}>
+          今日、カナカナが聞こえる場所。
+        </span>
+      ) : (
+        <span
+          style={{
+            marginLeft: "auto",
+            fontSize: 11,
+            color: C.onDarkSub,
+            flex: "none",
+          }}
+        >
+          {hm(now)}
+        </span>
+      )}
+    </div>
+  );
+
+  const searchBox = (
+    <div
+      style={{
+        position: "absolute",
+        pointerEvents: "auto",
+        ...(pc
+          ? { left: 68, top: 14, width: 300 }
+          : { left: 12, right: 12, top: 12 }),
+      }}
+    >
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={pc ? "地点名で探す（例: 見沼、高尾）" : "地点名で探す"}
+        aria-label="地点名で探す"
+        style={{
+          width: "100%",
+          padding: pc ? "11px 14px" : "12px 14px",
+          border: pc ? "1px solid rgba(15,23,42,.12)" : 0,
+          borderRadius: 11,
+          // スマホは16px未満だと iOS Safari が勝手にズームする
+          fontSize: pc ? 14 : 16,
+          color: C.ink,
+          outline: "none",
+          background: "rgba(255,255,255,.97)",
+          boxShadow: `0 2px 12px rgba(15,23,42,${pc ? ".14" : ".2"})`,
+          fontFamily: "inherit",
+        }}
+      />
+      {searchResults && (
+        <ul
+          style={{
+            margin: "8px 0 0",
+            padding: 0,
+            listStyle: "none",
+            background: "rgba(255,255,255,.98)",
+            borderRadius: 11,
+            boxShadow: `0 4px 18px rgba(15,23,42,${pc ? ".18" : ".22"})`,
+            overflow: "hidden",
+            maxHeight: pc ? 320 : 300,
+            overflowY: "auto",
+          }}
+        >
+          {searchResults.map((r) => (
+            <li key={r.p.id}>
+              <button
+                onClick={() => selectPlace(r.p.id)}
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: pc ? "11px 13px" : 13,
+                  background: "none",
+                  border: 0,
+                  borderBottom: `1px solid ${C.hairline}`,
+                  textAlign: "left",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                <span style={dotStyle(r.s.freshness, 11)} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: pc ? 14 : 15,
+                      fontWeight: 700,
+                      color: C.ink,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {r.p.name}
+                  </span>
+                  <span
+                    style={{
+                      display: "block",
+                      marginTop: 2,
+                      fontSize: 11,
+                      color: C.muted,
+                    }}
+                  >
+                    {placeLineText(r)}
+                  </span>
+                </span>
+                <span style={notesStyle(pc ? 14 : 13)}>
+                  {notesText(r.s.stars)}
+                </span>
+              </button>
+            </li>
+          ))}
+          {searchResults.length === 0 && (
+            <li
+              style={{
+                padding: "16px 14px",
+                fontSize: 13,
+                color: C.muted,
+                lineHeight: 1.7,
+              }}
+            >
+              見つかりませんでした。別の言い方で探すか、地図から選んでください。
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+
+  const legend = (
+    <div
+      style={{
+        position: "absolute",
+        left: 16,
+        // 地図の出典表示（左下）に重ねないぶんだけ上げる
+        bottom: 44,
+        pointerEvents: "auto",
+        background: "rgba(255,255,255,.96)",
+        border: `1px solid ${C.border2}`,
+        borderRadius: 11,
+        padding: "10px 14px",
+        boxShadow: "0 3px 14px rgba(15,23,42,.12)",
+        display: "flex",
+        gap: 16,
+      }}
+    >
+      {(
+        [
+          ["today", "今日", C.ink],
+          ["recent3d", "3日内", C.slateBtnHover],
+          ["season", "今季", C.slateBtn],
+          ["none", "記録なし", C.muted],
+        ] as const
+      ).map(([f, label, color]) => (
+        <span
+          key={f}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 12,
+            color,
+          }}
+        >
+          <span style={dotStyle(f, f === "today" ? 16 : f === "recent3d" ? 13 : 11)} />
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+
+  const mapArea = (
+    <div
+      style={{
+        position: "relative",
+        flex: 1,
+        minHeight: 0,
+        overflow: "hidden",
+        background: C.mapBg,
+      }}
+    >
+      <div style={{ position: "absolute", inset: 0 }}>
+        <MapView
+          ref={mapRef}
+          places={places}
+          statsById={statsById}
+          selectedId={selectedId}
+          hoverId={hoverId}
+          variant={variant}
+          onSelect={selectPlace}
+          onHover={(id, pt) => {
+            setHoverId(id);
+            setHoverPt(pt);
+          }}
+          onUserLocate={(lat, lng) => setUserPos({ lat, lng })}
+        />
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 1200,
+        }}
+      >
+        {searchBox}
+        {pc && legend}
+        {!pc && (
+          <>
+            <button
+              onClick={() => mapRef.current?.locate()}
+              aria-label="現在地から近い場所を探す"
+              style={{
+                position: "absolute",
+                right: 12,
+                top: 76,
+                pointerEvents: "auto",
+                width: 46,
+                height: 46,
+                border: 0,
+                borderRadius: 14,
+                background: "rgba(255,255,255,.97)",
+                color: C.slateBtnHover,
+                fontSize: 19,
+                lineHeight: 1,
+                cursor: "pointer",
+                boxShadow: "0 2px 10px rgba(15,23,42,.22)",
+              }}
+            >
+              ◎
+            </button>
+            <button
+              onClick={() => openQuick("now")}
+              style={{
+                position: "absolute",
+                right: 12,
+                bottom: 14,
+                pointerEvents: "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "15px 18px",
+                border: 0,
+                borderRadius: 16,
+                background: C.green,
+                color: C.white,
+                fontFamily: "inherit",
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: "pointer",
+                boxShadow: "0 5px 18px rgba(5,150,105,.42)",
+              }}
+            >
+              🌲 いま聞こえた
+            </button>
+          </>
+        )}
+
+        {pc && hoverPlace && hoverStats && hoverPt && (
+          <div
+            style={{
+              position: "absolute",
+              left: hoverPt.x,
+              top: hoverPt.y - 16,
+              transform: "translate(-50%,-100%)",
+              background: C.white,
+              border: `1px solid ${C.border2}`,
+              borderRadius: 10,
+              padding: "9px 13px",
+              boxShadow: "0 6px 20px rgba(15,23,42,.2)",
+              pointerEvents: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>
+              {hoverPlace.name}
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span style={dotStyle(hoverStats.freshness, 10)} />
+              <span style={{ fontSize: 12, color: C.slateBtn }}>
+                {reasonText(hoverStats, now)}
+              </span>
+              <span style={notesStyle(12)}>{notesText(hoverStats.stars)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* PCの右パネル。地図は全幅のまま、上に重ねる */}
+      {pc && (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 404,
+            background: C.white,
+            boxShadow: "-2px 0 28px rgba(15,23,42,.18)",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {win && (
+            <AnswerBlock
+              variant="pc"
+              vm={vm}
+              rest={restPool}
+              now={now}
+              sort={effSort}
+              onSort={onSort}
+              onOpen={() =>
+                answer ? selectPlace(answer.p.id) : onSort("near")
+              }
+              onOpenQuick={() => openQuick("now")}
+              onSelect={selectPlace}
+              onHover={(id) => {
+                setHoverId(id);
+                setHoverPt(null);
+              }}
+            />
+          )}
+          {selected && selectedRanked && win && (
+            <PlaceDetail
+              variant="pc"
+              place={selected}
+              stats={selectedRanked.s}
+              dist={selectedRanked.d}
+              now={now}
+              railState={win.state}
+              postState={postState}
+              comment={comment}
+              showComment={showComment}
+              shareUrl={xShareUrl(selected, false)}
+              doneShareUrl={xShareUrl(selected, true)}
+              onComment={setComment}
+              onOpenComment={() => setShowComment(true)}
+              onPost={(heard) =>
+                doPost({ heard, placeId: selected.id, withComment: true })
+              }
+              onRetry={() =>
+                lastPost.current &&
+                doPost({ ...lastPost.current, withComment: true })
+              }
+              onCloseDone={() => setPostState({ kind: "idle" })}
+              onOpenLater={() => openQuick("later")}
+              onClose={() => selectPlace(null)}
+            />
+          )}
+          {quick && (
+            <QuickPostSheet
+              variant="pc"
+              mode={quick}
+              near={nearest3}
+              hasLocation={!!userPos}
+              laterAt={laterAt}
+              onPickTime={setLaterAt}
+              onPost={quickPost}
+              onPickOnMap={() => {
+                setQuick(null);
+                setSelectedId(null);
+              }}
+              onClose={() => setQuick(null)}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-slate-100">
-      {/* ヘッダー */}
-      <header
-        className="z-20 bg-emerald-900 px-3 py-1.5 text-emerald-50 shadow"
-        style={{ paddingTop: "calc(0.375rem + env(safe-area-inset-top))" }}
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <h1 className="text-sm font-bold leading-tight">
-            ひぐらしのなくところに
-          </h1>
-          <p className="text-[11px] leading-tight text-emerald-200">
-            今日、カナカナが聞こえる場所。
-          </p>
-        </div>
-        {sunset && (
-          <p className="text-[11px] leading-tight text-emerald-300">
-            日の入り {sunset}ごろ・前後30分が聞きどき
-          </p>
-        )}
-      </header>
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        background: C.mapBg,
+      }}
+    >
+      {header}
 
       {demoMode && (
-        <div className="z-20 bg-amber-100 px-4 py-1 text-xs text-amber-900">
+        <div
+          style={{
+            flex: "none",
+            background: "#fef3c7",
+            color: "#78350f",
+            padding: "6px 14px",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
           お試しモードで動いています。表示中の投稿はサンプルで、あなたの投稿はこの端末にだけ保存されます。
         </div>
       )}
       {loadError && (
-        <div className="z-20 bg-red-100 px-4 py-1 text-xs text-red-900">
+        <div
+          style={{
+            flex: "none",
+            background: "#fef2f2",
+            color: "#991b1b",
+            padding: "6px 14px",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
           データの取得に失敗しました。しばらくして再読み込みしてください。
         </div>
       )}
 
-      {/* 地図 */}
-      <div className="relative flex-1">
-        <MapView
-          places={places}
-          freshnessById={freshnessById}
-          selectedId={selectedId}
-          onSelect={selectPlace}
-          onUserLocate={(lat, lng) => setUserPos({ lat, lng })}
+      {win && (
+        <DayRail
+          now={now}
+          win={win}
+          todayReports={todayReports}
+          variant={variant}
         />
-        {/* 凡例（スマホで地図を隠さないよう1行の帯にする） */}
-        <div className="absolute left-2 top-2 z-10 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 rounded-full bg-white/90 px-2.5 py-1 text-[10px] text-slate-700 shadow">
-          {(
-            [
-              ["today", "今日"],
-              ["recent3d", "3日内"],
-              ["season", "今季"],
-              ["none", "記録なし"],
-            ] as [Freshness, string][]
-          ).map(([f, label]) => (
-            <span key={f} className="flex items-center gap-1">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-full border border-slate-500"
-                style={{ backgroundColor: FRESHNESS_COLOR[f] }}
-              />
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
+      )}
 
-      {/* 下のパネル。検索中は高さを固定して、結果の増減で地図がカタカタ動くのを防ぐ */}
-      <div
-        className={`z-20 overflow-y-auto border-t border-slate-300 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] ${
-          !selected && (searchFocused || query.trim() !== "")
-            ? "h-[48%]"
-            : "max-h-[48%]"
-        }`}
-        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
-      >
-        {!selected && (
-          <>
-            {/* 地点名検索（つなぎ実装。UI再設計後は案Bの検索に置き換わる） */}
-            <div className="relative mb-2">
-              <input
-                type="search"
-                className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pl-3 pr-10 text-base"
-                placeholder="地点名で探す（例: 見沼、高尾）"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
-                aria-label="地点名で探す"
-              />
-              {query && (
-                <button
-                  className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-base leading-none text-slate-400"
-                  onClick={() => setQuery("")}
-                  aria-label="検索をクリア"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <h2 className="mb-2 text-sm font-bold text-slate-800">
-              {searchResults ? (
-                <>
-                  「{query.trim()}」で {searchResults.length} 件
-                </>
-              ) : (
-                <>
-                  {userPos ? "近くのおすすめ" : "いま期待できる場所"}
-                  {!userPos && (
-                    <span className="ml-2 font-normal text-slate-500">
-                      （地図右上の◎ボタンで現在地を使えます）
-                    </span>
-                  )}
-                </>
-              )}
-            </h2>
-            {searchResults && searchResults.length === 0 && (
-              <p className="py-4 text-sm text-slate-500">
-                見つかりませんでした。別の言い方で探すか、地図から選んでください。
-                （登録のない場所には今は投稿できません）
-              </p>
-            )}
-            <ul className="divide-y divide-slate-100">
-              {(searchResults
-                ? searchResults.map((place) => ({
-                    place,
-                    stats: statsById[place.id],
-                    dist: userPos
-                      ? distanceKm(userPos.lat, userPos.lng, place.lat, place.lng)
-                      : null,
-                  }))
-                : recommended
-              ).map(({ place, stats, dist }) => (
-                <li key={place.id}>
-                  <button
-                    className="flex w-full items-center justify-between py-2 text-left"
-                    onClick={() => selectPlace(place.id)}
-                  >
-                    <span>
-                      <span className="block text-sm font-medium text-slate-800">
-                        {place.name}
-                      </span>
-                      <span className="block text-xs text-slate-500">
-                        {place.pref} {place.city}
-                        {dist != null && ` ・ 約${dist.toFixed(1)}km`}
-                      </span>
-                    </span>
-                    <span className="text-right">
-                      <span className="block text-sm text-amber-500">
-                        {starsText(stats.stars)}
-                      </span>
-                      <span className="block text-xs text-slate-500">
-                        {stats.lastHeardAt
-                          ? `最終確認 ${timeText(stats.lastHeardAt, now)}`
-                          : place.externalRecord
-                            ? `外部の記録 ${place.externalRecord.date.replace(
-                                /^\d{4}-(\d{2})-(\d{2}|XX)$/,
-                                (_, m2, d2) =>
-                                  d2 === "XX"
-                                    ? `${Number(m2)}月`
-                                    : `${Number(m2)}/${Number(d2)}`
-                              )}`
-                            : "今シーズン記録なし"}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+      {mapArea}
 
-        {selected && selectedStats && (
-          <div>
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-base font-bold text-slate-800">
-                  {selected.name}
-                </h2>
-                <p className="text-xs text-slate-500">
-                  {selected.pref} {selected.city} ・{" "}
-                  {FRESHNESS_LABEL[selectedStats.freshness]}
-                </p>
-              </div>
-              <button
-                className="-mr-2 -mt-1 rounded p-3 text-base leading-none text-slate-400"
-                onClick={() => selectPlace(null)}
-                aria-label="閉じる"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-1 flex items-baseline gap-3">
-              <span className="text-lg text-amber-500">
-                {starsText(selectedStats.stars)}
-              </span>
-              <span className="text-xs text-slate-600">
-                {selectedStats.lastHeardAt
-                  ? `最終確認 ${timeText(selectedStats.lastHeardAt, now)}`
-                  : selected.externalRecord
-                    ? "アプリへの投稿はまだありません"
-                    : "今シーズンの確認はまだありません"}
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-slate-500">
-              今日 {selectedStats.todayReports.filter((r) => r.heard).length} 件確認
-              ・ 昨日 {selectedStats.yesterdayHeardCount} 件 ・ 今シーズン計{" "}
-              {selectedStats.seasonHeardCount} 件
-            </p>
-
-            {selected.externalRecord && (
-              <div className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
-                {selected.externalRecord.date.replace(
-                  /^(\d{4})-(\d{2})-(\d{2}|XX)$/,
-                  (_, y, m, d) => `${y}年${Number(m)}月${d === "XX" ? "" : `${Number(d)}日`}`
-                )}
-                {selected.externalRecord.time !== "不明" &&
-                  ` ${selected.externalRecord.time}`}
-                、ヒグラシが確認されたという記録があります。
-                <a
-                  className="ml-1 text-sky-600 underline"
-                  href={selected.externalRecord.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  記録を見る（外部サイト）
-                </a>
-              </div>
-            )}
-
-            {postState.kind === "done" ? (
-              <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
-                <p className="font-bold">カナカナ情報を受け取りました。</p>
-                <p className="mt-1 text-xs">
-                  今日ヒグラシを探している誰かの助けになります。
-                </p>
-                {postState.heard && (
-                  <a
-                    className="mt-2 inline-block rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white"
-                    href={xShareUrl(selected, true)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    𝕏 でシェアする
-                  </a>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    className="touch-manipulation select-none rounded-xl bg-emerald-600 px-2 py-3.5 text-sm font-bold text-white shadow active:bg-emerald-700 disabled:opacity-50"
-                    disabled={postState.kind === "sending"}
-                    onClick={() => post(true)}
-                  >
-                    🌲 カナカナ聞こえた！
-                  </button>
-                  <button
-                    className="touch-manipulation select-none rounded-xl bg-slate-600 px-2 py-3.5 text-sm font-bold text-white shadow active:bg-slate-700 disabled:opacity-50"
-                    disabled={postState.kind === "sending"}
-                    onClick={() => post(false)}
-                  >
-                    🌙 今日は静かだった
-                  </button>
-                </div>
-                {postState.kind === "sending" && (
-                  <p className="mt-2 text-xs text-slate-500">送信中…</p>
-                )}
-                {postState.kind === "error" && (
-                  <p className="mt-2 text-xs text-red-600">{postState.message}</p>
-                )}
-                <div className="mt-2 flex items-center gap-4">
-                  <a
-                    className="text-xs text-slate-500 underline"
-                    href={xShareUrl(selected, false)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    この場所を𝕏で共有
-                  </a>
-                </div>
-                {!showComment ? (
-                  <button
-                    className="mt-2 text-xs text-sky-600 underline"
-                    onClick={() => setShowComment(true)}
-                  >
-                    ひとこと添える（任意）
-                  </button>
-                ) : (
-                  <input
-                    className="mt-2 w-full rounded border border-slate-300 px-2 py-1.5 text-base"
-                    placeholder="例: 駐車場の奥の林でよく鳴いています"
-                    maxLength={200}
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                  />
-                )}
-              </>
-            )}
-
-            {selectedStats.todayReports.length > 0 && (
-              <div className="mt-3">
-                <h3 className="text-xs font-bold text-slate-600">今日の報告</h3>
-                <ul className="mt-1 space-y-1">
-                  {selectedStats.todayReports.slice(0, 8).map((r) => (
-                    <li key={r.id} className="text-xs text-slate-600">
-                      {timeText(new Date(r.created_at), now)}{" "}
-                      {r.heard ? "🌲 聞こえた" : "🌙 静かだった"}
-                      {r.comment && (
-                        <span className="text-slate-500"> — {r.comment}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+      {/* スマホ。下端のカードは高さを固定して、状態が変わっても地図が伸び縮みしないようにする */}
+      {!pc && win && (
+        <div
+          style={{
+            flex: "none",
+            background: C.white,
+            borderRadius: "20px 20px 0 0",
+            boxShadow: "0 -6px 24px rgba(15,23,42,.2)",
+            paddingBottom: "calc(10px + env(safe-area-inset-bottom))",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              padding: "8px 0 2px",
+            }}
+          >
+            <span
+              style={{
+                width: 38,
+                height: 4,
+                borderRadius: 99,
+                background: C.border3,
+              }}
+            />
           </div>
-        )}
-      </div>
+          <AnswerBlock
+            variant="sp"
+            vm={vm}
+            rest={restPool}
+            now={now}
+            sort={effSort}
+            onSort={onSort}
+            onOpen={() => (answer ? selectPlace(answer.p.id) : onSort("near"))}
+            onOpenQuick={() => openQuick("now")}
+            onSelect={selectPlace}
+            onHover={() => {}}
+          />
+        </div>
+      )}
+
+      {!pc && selected && selectedRanked && win && (
+        <PlaceDetail
+          variant="sp"
+          place={selected}
+          stats={selectedRanked.s}
+          dist={selectedRanked.d}
+          now={now}
+          railState={win.state}
+          postState={postState}
+          comment={comment}
+          showComment={showComment}
+          shareUrl={xShareUrl(selected, false)}
+          doneShareUrl={xShareUrl(selected, true)}
+          onComment={setComment}
+          onOpenComment={() => setShowComment(true)}
+          onPost={(heard) =>
+            doPost({ heard, placeId: selected.id, withComment: true })
+          }
+          onRetry={() =>
+            lastPost.current && doPost({ ...lastPost.current, withComment: true })
+          }
+          onCloseDone={() => setPostState({ kind: "idle" })}
+          onOpenLater={() => openQuick("later")}
+          onClose={() => selectPlace(null)}
+        />
+      )}
+
+      {!pc && quick && (
+        <QuickPostSheet
+          variant="sp"
+          mode={quick}
+          near={nearest3}
+          hasLocation={!!userPos}
+          laterAt={laterAt}
+          onPickTime={setLaterAt}
+          onPost={quickPost}
+          onPickOnMap={() => {
+            setQuick(null);
+            setSelectedId(null);
+          }}
+          onClose={() => setQuick(null)}
+        />
+      )}
     </div>
   );
 }
