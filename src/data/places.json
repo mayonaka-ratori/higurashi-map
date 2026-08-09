@@ -26,7 +26,7 @@
   { "id": "sakitama", "name": "さきたま古墳公園", "pref": "埼玉県", "city": "行田市", "lat": 36.12608, "lng": 139.47751 },
   { "id": "tokorozawa-koku", "name": "所沢航空記念公園", "pref": "埼玉県", "city": "所沢市", "lat": 35.79801, "lng": 139.473 },
   { "id": "sayamako", "name": "狭山湖（トトロの森・狭山丘陵）", "pref": "埼玉県", "city": "所沢市", "lat": 35.7621, "lng": 139.41322 },
-  { "id": "arahata-fuji", "name": "荒幡富士・狭山丘陵いきものふれあいの里", "pref": "埼玉県", "city": "所沢市", "lat": 35.783, "lng": 139.438, "externalRecord": { "date": "2026-08-07", "time": "夕方", "source": "狭山丘陵いきものふれあいの里センター「いきふれ自然情報」", "url": "https://ikifure.info/2026/08/07/" } },
+  { "id": "arahata-fuji", "name": "荒幡富士・狭山丘陵いきものふれあいの里", "pref": "埼玉県", "city": "所沢市", "lat": 35.77497, "lng": 139.44524, "externalRecord": { "date": "2026-08-07", "time": "夕方", "source": "狭山丘陵いきものふれあいの里センター「いきふれ自然情報」", "url": "https://ikifure.info/2026/08/07/" } },
   { "id": "chikozan", "name": "智光山公園", "pref": "埼玉県", "city": "狭山市", "lat": 35.88125, "lng": 139.39374 },
   { "id": "inariyama", "name": "稲荷山公園", "pref": "埼玉県", "city": "狭山市", "lat": 35.85179, "lng": 139.40084 },
   { "id": "sainomori-iruma", "name": "彩の森入間公園", "pref": "埼玉県", "city": "入間市", "lat": 35.83674, "lng": 139.3993 },
