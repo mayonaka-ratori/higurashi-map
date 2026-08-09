@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+@keyframes higPulse { 0% { transform: scale(.5); opacity: .5 } 100% { transform: scale(2.2); opacity: 0 } }
+@keyframes higRise { 0% { transform: translateY(20px); opacity: 0 } 100% { transform: translateY(0); opacity: 1 } }
+@keyframes higFade { 0% { opacity: 0 } 100% { opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important } }
+body { margin:0; background:#0f1a16; font-family:"Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif; -webkit-font-smoothing:antialiased; }
+a { color:#047857; }
+a:hover { color:#065f46; }
+input, button { font-family: inherit; }
+.leaflet-tooltip.hig-label { background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:2px 6px; font:700 11px/1.4 inherit; color:#0f172a; box-shadow:0 1px 5px rgba(15,23,42,.2); white-space:nowrap; }
+.leaflet-tooltip.hig-label::before { display:none; }
+.leaflet-container { font-family: inherit; }
+.leaflet-control-zoom { display:none; }
+::-webkit-scrollbar { width:0; height:0; }
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#0f1a16">
+<div style="position:relative;display:flex;flex-direction:column;flex:none;width:390px;height:844px;overflow:hidden;border-radius:28px;box-shadow:0 22px 60px rgba(0,0,0,.55);background:#eef2f6">
+
+  <div style="flex:none;background:#073024;color:#ecfdf5;padding:11px 14px 9px">
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <h1 style="margin:0;font-size:15px;font-weight:700;letter-spacing:.02em">ひぐらしのなくところに</h1>
+      <span style="margin-left:auto;font-size:11px;color:#8fd3ba;flex:none">{{ rail.clock }}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-top:7px">
+      <span style="font-size:11px;color:#8fd3ba;letter-spacing:.06em;flex:none">データ</span>
+      <span style="display:flex;flex:1;border:1px solid #1c5a47;border-radius:6px;overflow:hidden">
+        <button onClick="{{ modes.tonightPick }}" style="{{ modes.tonight }}">今夜</button>
+        <button onClick="{{ modes.fewPick }}" style="{{ modes.few }}">1件の日</button>
+        <button onClick="{{ modes.nonePick }}" style="{{ modes.none }}">ゼロの日</button>
+      </span>
+    </div>
+  </div>
+
+  <div style="flex:none;background:#0b3b2e;padding:10px 14px 8px">
+    <div style="display:flex;align-items:baseline;gap:9px">
+      <span style="{{ rail.stateStyle }}">{{ rail.state }}</span>
+      <span style="margin-left:auto;font-size:11px;color:#8fd3ba;flex:none">{{ rail.remain }}</span>
+    </div>
+    <div style="position:relative;height:48px;margin-top:8px">
+      <div style="position:absolute;left:0;right:0;top:15px;height:3px;border-radius:2px;background:#164b3b"></div>
+      <div style="{{ rail.dawnBand }}"></div>
+      <div style="{{ rail.duskBand }}"></div>
+      <sc-for list="{{ rail.marks }}" as="m" hint-placeholder-count="0">
+        <span style="{{ m.style }}"></span>
+      </sc-for>
+      <div style="{{ rail.nowMark }}"></div>
+      <div style="{{ rail.dawnLabel }}">{{ rail.dawn }}</div>
+      <div style="{{ rail.duskLabel }}">{{ rail.dusk }}</div>
+    </div>
+    <p style="margin:4px 0 0;font-size:11px;color:#8fd3ba;line-height:1.5">{{ rail.note }}</p>
+  </div>
+
+  <div style="position:relative;flex:1;min-height:0;overflow:hidden;background:#eef2f6">
+    <div style="position:absolute;inset:0"><div ref="{{ mapRef }}" style="width:100%;height:100%"></div></div>
+
+    <div style="position:absolute;inset:0;pointer-events:none;z-index:1200">
+
+      <div style="position:absolute;left:12px;right:12px;top:12px;pointer-events:auto">
+        <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="地点名で探す" style="width:100%;padding:12px 14px;border:0;border-radius:11px;font-size:16px;color:#0f172a;outline:none;background:rgba(255,255,255,.97);box-shadow:0 2px 12px rgba(15,23,42,.2)">
+        <sc-if value="{{ hasQuery }}" hint-placeholder-val="{{ false }}">
+          <ul style="margin:8px 0 0;padding:0;list-style:none;background:#fff;border-radius:11px;box-shadow:0 4px 18px rgba(15,23,42,.22);overflow:hidden;max-height:300px;overflow-y:auto">
+            <sc-for list="{{ results }}" as="r" hint-placeholder-count="4">
+              <li>
+                <button onClick="{{ r.select }}" style="display:flex;width:100%;align-items:center;gap:10px;padding:13px;background:none;border:0;border-bottom:1px solid #f1f5f9;text-align:left;cursor:pointer;font-family:inherit">
+                  <span style="{{ r.dotStyle }}"></span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font-size:15px;font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+                    <span style="display:block;margin-top:2px;font-size:11px;color:#64748b">{{ r.city }} ・ {{ r.dist }}</span>
+                  </span>
+                  <span style="{{ r.notesStyle }}">{{ r.notes }}</span>
+                </button>
+              </li>
+            </sc-for>
+            <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+              <li style="padding:16px 14px;font-size:13px;color:#64748b;line-height:1.7">見つかりませんでした。別の言い方で探すか、地図から選んでください。</li>
+            </sc-if>
+          </ul>
+        </sc-if>
+      </div>
+
+      <button onClick="{{ goToMe }}" aria-label="現在地から近い場所を探す" style="position:absolute;right:12px;top:76px;pointer-events:auto;width:46px;height:46px;border:0;border-radius:14px;background:rgba(255,255,255,.97);color:#334155;font-size:19px;line-height:1;cursor:pointer;box-shadow:0 2px 10px rgba(15,23,42,.22)">◎</button>
+
+      <button onClick="{{ openQuick }}" style="position:absolute;right:12px;bottom:14px;pointer-events:auto;display:flex;align-items:center;gap:8px;padding:15px 18px;border:0;border-radius:16px;background:#059669;color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 5px 18px rgba(5,150,105,.42)">🌲 いま聞こえた</button>
+    </div>
+  </div>
+
+  <div style="flex:none;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -6px 24px rgba(15,23,42,.2);padding-bottom:calc(10px + env(safe-area-inset-bottom))">
+    <div style="display:flex;justify-content:center;padding:8px 0 2px"><span style="width:38px;height:4px;border-radius:99px;background:#cbd5e1"></span></div>
+
+    <div style="{{ ans.headStyle }}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="{{ ans.kickerDot }}"></span>
+        <span style="{{ ans.kickerStyle }}">{{ ans.kicker }}</span>
+        <span style="{{ ans.notesStyle }}">{{ ans.notes }}</span>
+      </div>
+      <div style="{{ ans.nameStyle }}">{{ ans.name }}</div>
+      <sc-if value="{{ ans.hasPlaceLine }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:4px;font-size:12px;color:#475569">{{ ans.city }} ・ ここから {{ ans.dist }}</div>        <div style="margin-top:6px;font-size:13px;font-weight:700;color:#065f46">{{ ans.reason }}</div>
+      </sc-if>
+      <sc-if value="{{ ans.isEmpty }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:8px 0 0;font-size:12px;color:#475569;line-height:1.7">{{ ans.emptyLead }}</p>
+      </sc-if>
+      <button onClick="{{ ans.open }}" style="{{ ans.btnStyle }}">{{ ans.openLabel }}</button>
+    </div>
+
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px 7px">
+      <span style="font-size:11px;font-weight:700;color:#475569;letter-spacing:.08em">{{ ans.restTitle }}</span>
+      <span style="display:flex;gap:12px">
+        <button onClick="{{ sortCtl.recoPick }}" style="{{ sortCtl.reco }}">おすすめ順</button>
+        <button onClick="{{ sortCtl.nearPick }}" style="{{ sortCtl.near }}">近い順</button>
+      </span>
+    </div>
+    <div style="display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;padding:0 14px 12px;scroll-snap-type:x mandatory;scroll-padding-left:14px;scrollbar-width:none;-webkit-overflow-scrolling:touch">
+      <sc-for list="{{ rest }}" as="c" hint-placeholder-count="4">
+        <button onClick="{{ c.select }}" style="flex:none;width:216px;height:104px;scroll-snap-align:start;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:12px 13px;cursor:pointer;font-family:inherit">
+          <span style="display:flex;align-items:center;gap:8px">
+            <span style="{{ c.dotStyle }}"></span>
+            <span style="{{ c.reasonStyle }}">{{ c.reason }}</span>
+            <span style="{{ c.notesStyle }}">{{ c.notes }}</span>
+          </span>
+          <span style="display:block;margin-top:8px;font-size:16px;font-weight:700;color:#0f172a;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</span>
+          <span style="display:block;margin-top:3px;font-size:12px;color:#64748b">{{ c.city }} ・ {{ c.dist }}</span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+
+  <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:1400;display:flex;flex-direction:column;justify-content:flex-end">
+      <button onClick="{{ clearSel }}" aria-label="閉じる" style="flex:1;background:rgba(15,23,42,.2);border:0;cursor:pointer"></button>
+      <div style="flex:none;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -8px 26px rgba(15,23,42,.26);max-height:76vh;display:flex;flex-direction:column;animation:higRise .26s ease-out">
+        <div style="flex:none;display:flex;justify-content:center;padding:9px 0 3px"><span style="width:38px;height:4px;border-radius:99px;background:#cbd5e1"></span></div>
+        <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px 18px 18px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <span style="{{ sel.dotStyle }}"></span>
+            <span style="font-size:12px;font-weight:700;color:#475569;letter-spacing:.06em">{{ sel.freshLabel }}</span>
+            <button onClick="{{ clearSel }}" aria-label="閉じる" style="margin-left:auto;margin-right:-10px;background:none;border:0;font-size:17px;line-height:1;color:#64748b;cursor:pointer;padding:11px 13px">✕</button>
+          </div>
+          <h2 style="margin:6px 0 0;font-size:22px;font-weight:700;color:#0f172a;line-height:1.3">{{ sel.name }}</h2>
+          <p style="margin:5px 0 0;font-size:13px;color:#475569">{{ sel.city }} ・ ここから {{ sel.dist }}</p>
+          <div style="margin-top:13px;display:flex;align-items:baseline;gap:10px">
+            <span style="{{ sel.notesStyle }}">{{ sel.notes }}</span>
+            <span style="font-size:12px;color:#475569">期待度・{{ sel.notesLabel }}</span>
+          </div>
+          <p style="margin:6px 0 0;font-size:14px;font-weight:700;color:#065f46">{{ sel.reason }}</p>
+          <p style="margin:6px 0 0;font-size:12px;color:#64748b">{{ sel.counts }}</p>
+          <sc-if value="{{ sel.hasToday }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:18px">
+              <h3 style="margin:0 0 4px;font-size:11px;font-weight:700;color:#475569;letter-spacing:.07em">今日の報告</h3>
+              <ul style="margin:0;padding:0;list-style:none">
+                <sc-for list="{{ sel.today }}" as="r" hint-placeholder-count="3">
+                  <li style="display:flex;gap:12px;padding:10px 0;border-top:1px solid #f2f5f4">
+                    <span style="flex:none;width:42px;font-size:12px;color:#64748b;padding-top:1px">{{ r.time }}</span>
+                    <span style="flex:1;min-width:0">
+                      <span style="{{ r.stateStyle }}">{{ r.stateText }}</span>
+                      <sc-if value="{{ r.hasComment }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:3px;font-size:12px;color:#64748b;line-height:1.55">{{ r.comment }}</span></sc-if>
+                    </span>
+                  </li>
+                </sc-for>
+              </ul>
+            </div>
+          </sc-if>
+          <a href="#" style="display:inline-block;margin-top:18px;font-size:13px;color:#64748b;text-decoration:underline;text-underline-offset:3px">この場所を𝕏で共有</a>
+        </div>
+
+        <div style="flex:none;border-top:1px solid #e6ebe9;background:#f7fbf9;padding:14px 18px calc(20px + env(safe-area-inset-bottom))">
+          <sc-if value="{{ postIdle }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <button onClick="{{ postHeardBtn }}" style="border-radius:14px;background:#059669;padding:17px 6px;font-size:14px;font-weight:700;color:#fff;border:0;cursor:pointer;line-height:1.35">🌲 カナカナ聞こえた！</button>
+              <button onClick="{{ postQuietBtn }}" style="border-radius:14px;background:#475569;padding:17px 6px;font-size:14px;font-weight:700;color:#fff;border:0;cursor:pointer;line-height:1.35">🌙 今日は静かだった</button>
+            </div>
+            <sc-if value="{{ commentClosed }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-top:6px">
+                <button onClick="{{ openComment }}" style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px;color:#475569;background:none;border:0;padding:11px 2px;cursor:pointer;font-family:inherit"><span style="font-size:15px;line-height:1;color:#64748b">＋</span>ひとこと添える（任意）</button>
+                <button onClick="{{ openLater }}" style="white-space:nowrap;font-size:12px;font-weight:700;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:9999px;padding:11px 15px;cursor:pointer;font-family:inherit">さっき聞いた分を記録</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ commentOpen }}" hint-placeholder-val="{{ false }}">
+              <input value="{{ comment }}" onChange="{{ onComment }}" placeholder="例: 駐車場の奥の林でよく鳴いています" style="margin-top:11px;width:100%;padding:12px 13px;border:1px solid #cbd5e1;border-radius:11px;font-size:16px;color:#0f172a;outline:none;background:#fff">
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{ postSending }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:11px;padding:18px 4px">
+              <span style="width:9px;height:9px;border-radius:9999px;background:#059669;animation:higPulse 1.2s ease-out infinite"></span>
+              <span style="font-size:14px;font-weight:700;color:#065f46">送信中…</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ postDone }}" hint-placeholder-val="{{ false }}">
+            <div style="border-radius:14px;background:#f0fbf5;border:1px solid #a7f3d0;padding:16px;animation:higRise .28s ease-out">
+              <div style="font-size:16px;font-weight:700;color:#065f46">カナカナ情報を受け取りました。</div>
+              <p style="margin:7px 0 0;font-size:13px;color:#047857;line-height:1.65">今日ヒグラシを探している誰かの助けになります。</p>
+              <sc-if value="{{ postHeard }}" hint-placeholder-val="{{ true }}">
+                <p style="margin:8px 0 0;font-size:12px;color:#047857">この場所のピンが今 🟢 になりました。</p>
+              </sc-if>
+              <div style="margin-top:13px;display:flex;gap:10px">
+                <sc-if value="{{ postHeard }}" hint-placeholder-val="{{ true }}">
+                  <a href="#" style="flex:1;text-align:center;border-radius:12px;background:#0f172a;color:#fff;padding:14px 8px;font-size:14px;font-weight:700;text-decoration:none">𝕏 でシェアする</a>
+                </sc-if>
+                <button onClick="{{ closeDone }}" style="flex:1;border-radius:12px;background:#fff;border:1px solid #cbd5e1;color:#334155;padding:14px 8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">閉じる</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ postError }}" hint-placeholder-val="{{ false }}">
+            <div style="border-radius:13px;background:#fef2f2;border:1px solid #fecaca;padding:15px">
+              <div style="font-size:14px;font-weight:700;color:#991b1b">送信できませんでした</div>
+              <p style="margin:6px 0 0;font-size:13px;color:#b91c1c;line-height:1.6">通信環境を確認して、もう一度お試しください。</p>
+              <button onClick="{{ retryPost }}" style="margin-top:12px;width:100%;border-radius:12px;background:#991b1b;color:#fff;border:0;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">もう一度送る</button>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ quickOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:1500;display:flex;flex-direction:column;justify-content:flex-end">
+      <button onClick="{{ closeQuick }}" aria-label="閉じる" style="flex:1;background:rgba(15,23,42,.24);border:0;cursor:pointer"></button>
+      <div style="flex:none;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -8px 26px rgba(15,23,42,.26);padding:18px 18px calc(22px + env(safe-area-inset-bottom));animation:higRise .24s ease-out">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <span style="font-size:16px;font-weight:700;color:#0f172a">{{ quick.title }}</span>
+          <button onClick="{{ closeQuick }}" style="margin-left:auto;background:none;border:0;font-size:17px;line-height:1;color:#64748b;cursor:pointer;padding:10px 12px;margin-right:-10px">✕</button>
+        </div>
+        <p style="margin:5px 0 0;font-size:12px;color:#64748b;line-height:1.65">{{ quick.lead }}</p>
+        <sc-if value="{{ quick.isLater }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:7px;margin-top:13px;overflow-x:auto;overflow-y:hidden">
+            <sc-for list="{{ quick.times }}" as="t" hint-placeholder-count="4">
+              <button onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <ul style="margin:14px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ quick.near }}" as="n" hint-placeholder-count="3">
+            <li>
+              <button onClick="{{ n.post }}" style="display:flex;width:100%;align-items:center;gap:12px;padding:15px 14px;border:1px solid #d8e0dd;border-radius:13px;background:#fff;text-align:left;cursor:pointer;font-family:inherit">
+                <span style="{{ n.dotStyle }}"></span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font-size:15px;font-weight:700;color:#0f172a">{{ n.name }}</span>
+                  <span style="display:block;margin-top:2px;font-size:12px;color:#64748b">{{ n.city }} ・ {{ n.dist }}</span>
+                </span>
+                <span style="flex:none;font-size:13px;font-weight:700;color:#047857">記録 →</span>
+              </button>
+            </li>
+          </sc-for>
+        </ul>
+        <button onClick="{{ pickOnMap }}" style="margin-top:12px;width:100%;padding:14px;border:1px dashed #cbd5e1;border-radius:13px;background:none;color:#475569;font-size:13px;cursor:pointer;font-family:inherit">この中にない — 地図から選ぶ</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844},&quot;noteColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#0e7490&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#0e7490&quot;,&quot;#b45309&quot;,&quot;#047857&quot;,&quot;#1c1917&quot;],&quot;section&quot;:&quot;期待度の記号&quot;}}">
+// 案4「今夜の答え」— スマホ（390×844）
+// PCと同じ賭け。一覧を並べず、今日の答えを一つ出す。段数もPCと変えない。
+// スマホ側の決め: 地図を最大にし、答えは下端の固定カード1枚に畳む。
+// 投稿は画面のどこにいても押せるよう、地図の右下に常駐させる（地点を先に選ばせない）。
+
+class Component extends DCLogic {
+  state = {
+    places: [],
+    dataMode: "tonight",
+    selectedId: null,
+    query: "",
+    sort: "reco",
+    postState: { kind: "idle" },
+    comment: "",
+    showComment: false,
+    quick: null,
+    laterAt: "さっき",
+  };
+
+  componentDidMount() {
+    Promise.all([
+      import("./higurashi-core.js"),
+      import("./hig-kit.js"),
+      fetch("data/places.json").then((r) => r.json()),
+    ]).then(([core, kit, places]) => {
+      this.core = core;
+      this.kit = kit;
+      this.now = core.sampleNow();
+      this.applyMode("tonight", places);
+      this.setState({ places }, () => {
+        this.forceUpdate();
+        this.tryMap();
+      });
+    });
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this._retry);
+    clearTimeout(this.postTimer);
+    if (this.ctrl) {
+      this.ctrl.destroy();
+      this.ctrl = null;
+    }
+  }
+
+  applyMode(mode, placesArg) {
+    const all = this.core.sampleReports(this.now);
+    this.reports = mode === "none" ? [] : mode === "few" ? all.filter((r) => r.place_id === "akigase") : all;
+    this.computeStats(placesArg || this.state.places);
+  }
+
+  computeStats(places) {
+    const byPlace = new Map();
+    for (const r of this.reports) {
+      const l = byPlace.get(r.place_id);
+      if (l) l.push(r);
+      else byPlace.set(r.place_id, [r]);
+    }
+    this.stats = {};
+    for (const p of places) this.stats[p.id] = this.core.placeStats(byPlace.get(p.id) || [], this.now);
+  }
+
+  setMode = (mode) => {
+    this.applyMode(mode);
+    this.setState({ dataMode: mode, selectedId: null, postState: { kind: "idle" }, quick: null }, () => {
+      if (!this.ctrl) return;
+      this.ctrl.setSelected(null);
+      this.ctrl.setData(this.state.places, (id) => this.stats[id]);
+    });
+  };
+
+  setMapEl = (el) => {
+    this.mapEl = el;
+    this.tryMap();
+  };
+
+  tryMap = () => {
+    if (this.ctrl || !this.mapEl || !window.L || !this.kit || !this.state.places.length) {
+      if (!this.ctrl) {
+        clearTimeout(this._retry);
+        this._retry = setTimeout(this.tryMap, 150);
+      }
+      return;
+    }
+    this.ctrl = this.kit.mountMap(this.mapEl, {
+      center: [35.83, 139.55],
+      zoom: 9.6,
+      labelZoom: 10.4,
+      onSelect: (id) => this.select(id),
+      onHover: () => {},
+      onMove: () => {},
+    });
+    this.ctrl.setData(this.state.places, (id) => this.stats[id]);
+  };
+
+  goToMe = () => {
+    this.setState({ sort: "near", selectedId: null }, () => {
+      this.ctrl.setSelected(null);
+      this.ctrl.locate(this.core.SAMPLE_POS);
+    });
+  };
+
+  select = (id) => {
+    clearTimeout(this.postTimer);
+    this.setState({ selectedId: id, postState: { kind: "idle" }, showComment: false, comment: "", quick: null, query: "" }, () => {
+      if (!this.ctrl) return;
+      this.ctrl.setSelected(id);
+      if (!id) return;
+      const p = this.state.places.find((x) => x.id === id);
+      // 詳細シートに隠れないよう、中心を下へずらす
+      if (p) this.ctrl.focus(p, 0, -110);
+    });
+  };
+
+  post = (heard) => {
+    if (this.state.postState.kind === "sending") return;
+    this._lastHeard = heard;
+    this.setState({ postState: { kind: "sending", heard } });
+    clearTimeout(this.postTimer);
+    this.postTimer = setTimeout(() => this.commit(this.state.selectedId, heard), 900);
+  };
+
+  commit(placeId, heard) {
+    this.reports = [
+      {
+        id: "u" + Date.now(),
+        place_id: placeId,
+        heard,
+        comment: this.state.comment.trim() ? this.state.comment.trim() : null,
+        latitude: null,
+        longitude: null,
+        accuracy: 30,
+        created_at: new Date(this.now.getTime()).toISOString(),
+      },
+      ...this.reports,
+    ];
+    this.computeStats(this.state.places);
+    this.setState({ postState: { kind: "done", heard }, showComment: false, comment: "" }, () => {
+      if (this.ctrl) this.ctrl.setData(this.state.places, (id) => this.stats[id]);
+    });
+  }
+
+  quickPost = (id) => {
+    this.setState({ quick: null, selectedId: id, postState: { kind: "sending", heard: true } }, () => {
+      this.ctrl && this.ctrl.setSelected(id);
+      const p = this.state.places.find((x) => x.id === id);
+      if (p && this.ctrl) this.ctrl.focus(p, 0, -110);
+      clearTimeout(this.postTimer);
+      this.postTimer = setTimeout(() => this.commit(id, true), 900);
+    });
+  };
+
+  nearest(n) {
+    const pos = this.core.SAMPLE_POS;
+    return [...this.state.places]
+      .map((p) => ({ p, d: this.core.distanceKm(pos.lat, pos.lng, p.lat, p.lng) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, n);
+  }
+
+  ranked() {
+    const { distanceKm, rankScore } = this.core;
+    const pos = this.core.SAMPLE_POS;
+    const out = this.state.places.map((p) => ({ p, s: this.stats[p.id], d: distanceKm(pos.lat, pos.lng, p.lat, p.lng) }));
+    if (this.state.sort === "near") out.sort((a, b) => a.d - b.d || b.s.score - a.s.score);
+    else out.sort((a, b) => rankScore(b.s, b.d) - rankScore(a.s, a.d) || a.d - b.d);
+    return out;
+  }
+
+  modeStyle(on) {
+    const base = "flex:1;border:0;padding:6px 4px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;line-height:1.2;";
+    return on ? base + "background:#ecfdf5;color:#073024" : base + "background:transparent;color:#a7f3d0";
+  }
+  chipStyle(on) {
+    return on
+      ? "flex:none;border-radius:9999px;padding:9px 15px;line-height:1.2;white-space:nowrap;cursor:pointer;background:#0b3b2e;color:#ecfdf5;border:1px solid #0b3b2e;font-family:inherit;font-size:13px;font-weight:700"
+      : "flex:none;border-radius:9999px;padding:9px 15px;line-height:1.2;white-space:nowrap;cursor:pointer;background:#fff;color:#475569;border:1px solid #d8e0dd;font-family:inherit;font-size:13px;font-weight:700";
+  }
+  sortStyle(on) {
+    return on
+      ? "background:none;border:0;padding:14px 10px;margin:-14px -10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;color:#0b3b2e;text-decoration:underline;text-underline-offset:3px"
+      : "background:none;border:0;padding:14px 10px;margin:-14px -10px;cursor:pointer;font-family:inherit;font-size:12px;color:#64748b";
+  }
+  noteStyle(size) {
+    const c = this.props.noteColor || "#0e7490";
+    return "flex:none;font-size:" + size + "px;letter-spacing:.13em;color:" + c;
+  }
+
+  renderVals() {
+    const core = this.core;
+    const kit = this.kit;
+    if (!core || !kit || !this.stats) {
+      return { mapRef: this.setMapEl, query: this.state.query, onQuery: () => {}, comment: "", onComment: () => {} };
+    }
+    const { reasonText, hm, distanceKm } = core;
+    const { notesText, notesLabel, dotStyle, listeningWindows, dayPos } = kit;
+    const now = this.now;
+    const pos = core.SAMPLE_POS;
+    const w = listeningWindows(now, pos.lat, pos.lng);
+
+    const band = (from, to, color) =>
+      `position:absolute;left:${dayPos(from) * 100}%;width:${(dayPos(to) - dayPos(from)) * 100}%;top:12px;height:9px;border-radius:5px;background:${color}`;
+
+    const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const todays = this.reports.filter((r) => Date.parse(r.created_at) >= today0);
+    const marks = todays.map((r, i) => {
+      const d = new Date(r.created_at);
+      const up = i % 2 === 0;
+      return {
+        key: r.id || i,
+        style:
+          `position:absolute;left:${dayPos(d) * 100}%;top:${up ? 2 : 23}px;width:6px;height:6px;margin-left:-3px;border-radius:9999px;` +
+          `background:${r.heard ? "#5eead4" : "#94a3b8"};box-shadow:0 0 0 2px rgba(11,59,46,.9)`,
+      };
+    });
+
+    const ranked = this.ranked();
+    const todayOnes = ranked.filter((r) => r.s.freshness === "today");
+    const answer = todayOnes.length > 0 && todayOnes[0].s.stars >= 3 ? todayOnes[0] : null;
+    const others = ranked.filter((r) => !answer || r.p.id !== answer.p.id);
+    const othersWithRecord = others.filter((r) => r.s.freshness !== "none");
+    const restHasRecords = othersWithRecord.length > 0;
+    const restPool = (restHasRecords ? othersWithRecord : others).slice(0, 6);
+
+    const q = this.state.query.trim().toLowerCase();
+    const results = q ? ranked.filter((r) => (r.p.name + r.p.city + r.p.pref).toLowerCase().includes(q)).slice(0, 8) : [];
+
+    const sel = this.state.selectedId ? this.state.places.find((p) => p.id === this.state.selectedId) : null;
+    const ss = sel ? this.stats[sel.id] : null;
+    const qk = this.state.quick;
+
+    const card = (r) => {
+      const isToday = r.s.freshness === "today";
+      return {
+        key: r.p.id,
+        name: r.p.name,
+        city: r.p.pref + " " + r.p.city,
+        dist: r.d.toFixed(1) + "km",
+        dotStyle: dotStyle(r.s.freshness, 11),
+        notes: notesText(r.s.stars),
+        notesStyle: this.noteStyle(13) + ";margin-left:auto",
+        reason: r.s.lastHeardAt ? core.agoText(r.s.lastHeardAt, now) + "に確認" : "記録なし",
+        reasonStyle: isToday
+          ? "flex:1;min-width:0;font-size:11px;font-weight:700;color:#047857;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          : "flex:1;min-width:0;font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",
+        select: () => this.select(r.p.id),
+      };
+    };
+
+    return {
+      mapRef: this.setMapEl,
+      query: this.state.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      hasQuery: q.length > 0,
+      results: results.map((r) => ({
+        key: r.p.id,
+        name: r.p.name,
+        city: r.p.pref + " " + r.p.city,
+        dist: r.d.toFixed(1) + "km",
+        dotStyle: dotStyle(r.s.freshness, 11),
+        notes: notesText(r.s.stars),
+        notesStyle: this.noteStyle(13),
+        select: () => this.select(r.p.id),
+      })),
+      noResults: q.length > 0 && results.length === 0,
+      goToMe: this.goToMe,
+
+      modes: {
+        tonight: this.modeStyle(this.state.dataMode === "tonight"),
+        few: this.modeStyle(this.state.dataMode === "few"),
+        none: this.modeStyle(this.state.dataMode === "none"),
+        tonightPick: () => this.setMode("tonight"),
+        fewPick: () => this.setMode("few"),
+        nonePick: () => this.setMode("none"),
+      },
+
+      rail: {
+        clock: hm(now),
+        state: w.state,
+        stateStyle: "font-size:14px;font-weight:700;color:" + (w.tone === "now" ? "#6ee7b7" : "#d1fae5"),
+        remain: w.remain,
+        note: w.note,
+        dawn: hm(w.dawn),
+        dusk: hm(w.dusk),
+        dawnBand: band(w.wins[0].from, w.wins[0].to, "#99f6e4"),
+        duskBand: band(w.wins[1].from, w.wins[1].to, "#fcd34d"),
+        dawnLabel: `position:absolute;left:${dayPos(w.dawn) * 100}%;top:26px;transform:translateX(-50%);font-size:11px;font-weight:700;color:#99f6e4;white-space:nowrap`,
+        duskLabel: `position:absolute;left:${dayPos(w.dusk) * 100}%;top:26px;transform:translateX(-50%);font-size:11px;font-weight:700;color:#fcd34d;white-space:nowrap`,
+        nowMark: `position:absolute;left:${dayPos(now) * 100}%;top:4px;width:3px;height:25px;margin-left:-1.5px;border-radius:2px;background:#ecfdf5;box-shadow:0 0 0 3px rgba(11,59,46,.85)`,
+        marks,
+      },
+
+      ans: answer
+        ? {
+            headStyle: "display:flex;flex-direction:column;height:196px;background:#f0fbf5;border-top:1px solid #d6ece2;border-bottom:1px solid #d6ece2;padding:13px 14px 14px;margin-top:6px",
+            kickerDot: "flex:none;width:9px;height:9px;border-radius:9999px;background:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.18)",
+            kickerStyle: "font-size:11px;font-weight:700;color:#047857;letter-spacing:.1em",
+            kicker: w.active && w.active.kind === "dawn" ? "今朝はここ" : "今夜はここ",
+            notes: notesText(answer.s.stars),
+            notesStyle: this.noteStyle(16) + ";margin-left:auto",
+            nameStyle: "margin-top:8px;font-size:21px;font-weight:700;color:#0f172a;line-height:1.25",
+            name: answer.p.name,
+            hasPlaceLine: true,
+            city: answer.p.pref + " " + answer.p.city,
+            dist: answer.d.toFixed(1) + "km",
+            reason: reasonText(answer.s, now),
+            isEmpty: false,
+            emptyLead: "",
+            open: () => this.select(answer.p.id),
+            openLabel: "この場所を見る",
+            btnStyle:
+              "margin-top:auto;width:100%;padding:15px;border:0;border-radius:13px;background:#0b3b2e;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit",
+            restTitle: restHasRecords ? "ほかの候補" : "近くの場所",
+          }
+        : {
+            headStyle: "display:flex;flex-direction:column;height:196px;background:#f8fafc;border-top:1px solid #e6ebe9;border-bottom:1px solid #e6ebe9;padding:13px 14px 14px;margin-top:6px",
+            kickerDot: "flex:none;width:9px;height:9px;border-radius:9999px;background:#94a3b8;box-shadow:0 0 0 3px rgba(148,163,184,.18)",
+            kickerStyle: "font-size:11px;font-weight:700;color:#475569;letter-spacing:.1em",
+            kicker: "きょうの状況",
+            notes: "",
+            notesStyle: "display:none",
+            nameStyle: "margin-top:8px;font-size:19px;font-weight:700;color:#0f172a;line-height:1.35",
+            name: todayOnes.length ? "確かなことは、まだ言えません" : "今日はまだ誰も聞いていません",
+            hasPlaceLine: false,
+            city: "",
+            dist: "",
+            reason: "",
+            isEmpty: true,
+            emptyLead: todayOnes.length
+              ? "今日届いているのは " + todays.filter((r) => r.heard).length + " 件だけです。下は実績のある場所を近い順に出しています。"
+              : !restHasRecords
+                ? "下は現在地から近い場所です。行って聞こえたら、その場で教えてください。"
+                : w.daytime
+                  ? "曇りの日や暗い林なら日中でも鳴きます。下は今シーズン鳴いた実績のある場所です。"
+                  : "夜明けと日の入りの前後30分が聞きどきです。下は実績のある場所を近い順に出しています。",
+            open: () => this.setState({ sort: "near" }),
+            openLabel: "近い順にならべる",
+            btnStyle:
+              "margin-top:auto;width:100%;padding:15px;border:1px solid #cbd5e1;border-radius:13px;background:#fff;color:#0f172a;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit",
+            restTitle: restHasRecords ? "実績のある場所" : "近くの場所",
+          },
+      rest: restPool.map(card),
+
+      sortCtl: {
+        reco: this.sortStyle(this.state.sort === "reco"),
+        near: this.sortStyle(this.state.sort === "near"),
+        recoPick: () => this.setState({ sort: "reco" }),
+        nearPick: () => this.setState({ sort: "near" }),
+      },
+
+      hasSel: !!sel,
+      clearSel: () => this.select(null),
+      sel: sel
+        ? {
+            name: sel.name,
+            city: sel.pref + " " + sel.city,
+            dist: distanceKm(pos.lat, pos.lng, sel.lat, sel.lng).toFixed(1) + "km",
+            dotStyle: dotStyle(ss.freshness, 12),
+            freshLabel: { today: "今日確認", recent3d: "3日以内に確認", season: "今シーズン確認あり", none: "今シーズンの記録なし" }[ss.freshness],
+            notes: notesText(ss.stars),
+            notesStyle: this.noteStyle(19),
+            notesLabel: notesLabel(ss.stars),
+            reason: reasonText(ss, now),
+            counts: "今日 " + ss.todayHeardCount + " 件確認 ・ 昨日 " + ss.yesterdayHeardCount + " 件 ・ 今シーズン計 " + ss.seasonHeardCount + " 件",
+            hasToday: ss.todayReports.length > 0,
+            today: ss.todayReports.slice(0, 8).map((r, i) => ({
+              key: r.id || i,
+              time: hm(new Date(r.created_at)),
+              stateText: r.heard ? "🌲 聞こえた" : "🌙 静かだった",
+              stateStyle: r.heard ? "display:block;font-size:13px;font-weight:700;color:#047857" : "display:block;font-size:13px;color:#64748b",
+              hasComment: !!r.comment,
+              comment: r.comment ? "「" + r.comment + "」" : "",
+            })),
+          }
+        : {},
+
+      postIdle: this.state.postState.kind === "idle",
+      postSending: this.state.postState.kind === "sending",
+      postDone: this.state.postState.kind === "done",
+      postError: this.state.postState.kind === "error",
+      postHeard: this.state.postState.heard === true,
+      postHeardBtn: () => this.post(true),
+      postQuietBtn: () => this.post(false),
+      retryPost: () => this.post(this._lastHeard),
+      closeDone: () => this.setState({ postState: { kind: "idle" } }),
+      comment: this.state.comment,
+      onComment: (e) => this.setState({ comment: e.target.value }),
+      openComment: () => this.setState({ showComment: true }),
+      commentOpen: this.state.showComment,
+      commentClosed: !this.state.showComment,
+
+      quickOpen: !!qk,
+      openQuick: () => this.setState({ quick: "now" }),
+      openLater: () => this.setState({ quick: "later" }),
+      closeQuick: () => this.setState({ quick: null }),
+      pickOnMap: () => this.setState({ quick: null, selectedId: null }, () => this.ctrl && this.ctrl.setSelected(null)),
+      quick: {
+        isLater: qk === "later",
+        title: qk === "later" ? "あとから記録する" : "どこで聞こえましたか",
+        lead:
+          qk === "later"
+            ? "いつの分かを選んでから、場所を押してください。昼間に聞いた分も、あとから入れられます。"
+            : "現在地から近い順に出しています。押すとその場で記録されます。",
+        times: ["さっき", "1時間前", "今朝", "昨日の夕方"].map((t) => ({
+          key: t,
+          label: t,
+          style: this.chipStyle(this.state.laterAt === t),
+          pick: () => this.setState({ laterAt: t }),
+        })),
+        near: this.nearest(3).map(({ p, d }) => ({
+          key: p.id,
+          name: p.name,
+          city: p.pref + " " + p.city,
+          dist: d.toFixed(1) + "km",
+          dotStyle: dotStyle(this.stats[p.id].freshness, 12),
+          post: () => this.quickPost(p.id),
+        })),
+      },
+    };
+  }
+}
+
+</script>
+</body>
+</html>
