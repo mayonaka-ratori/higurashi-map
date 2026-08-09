@@ -26,10 +26,30 @@ function toGeoJson(
       geometry: { type: "Point", coordinates: [p.lng, p.lat] },
       properties: {
         id: p.id,
-        color: FRESHNESS_COLOR[freshnessById[p.id] ?? "none"],
+        freshness: freshnessById[p.id] ?? "none",
       },
     })),
   };
+}
+
+// 鮮度ごとの出し分け（design-handoff/README.md「地図の仕様」の確定値）
+function byFreshness(
+  today: number | string,
+  recent3d: number | string,
+  season: number | string,
+  none: number | string
+) {
+  return [
+    "match",
+    ["get", "freshness"],
+    "today",
+    today,
+    "recent3d",
+    recent3d,
+    "season",
+    season,
+    none,
+  ] as unknown as maplibregl.ExpressionSpecification;
 }
 
 export default function MapView({
@@ -98,19 +118,34 @@ export default function MapView({
         id: "places-circle",
         type: "circle",
         source: "places",
+        layout: {
+          // 今日>3日内>今季>記録なし の順で手前に重ねる
+          "circle-sort-key": byFreshness(3, 2, 1, 0),
+        },
         paint: {
-          // スポットが密集する縮尺では小さく、寄ったら大きく
+          // 半径はズーム連動＋鮮度で段階付け（確定値そのまま）
           "circle-radius": [
             "interpolate",
             ["linear"],
             ["zoom"],
-            8, 5,
-            11, 9,
-            14, 12,
+            8, byFreshness(7.5, 5.5, 4, 2.5),
+            11, byFreshness(11, 8.5, 6.5, 4.5),
+            14, byFreshness(15, 11, 9, 6),
           ],
-          "circle-color": ["get", "color"],
-          "circle-stroke-width": 1.5,
-          "circle-stroke-color": "#334155",
+          "circle-color": byFreshness(
+            FRESHNESS_COLOR.today,
+            FRESHNESS_COLOR.recent3d,
+            FRESHNESS_COLOR.season,
+            FRESHNESS_COLOR.none
+          ),
+          "circle-opacity": byFreshness(1, 1, 1, 0.85),
+          "circle-stroke-width": byFreshness(2.5, 2, 1.75, 1),
+          "circle-stroke-color": byFreshness(
+            "#ffffff",
+            "#ffffff",
+            "#64748b",
+            "#e2e8f0"
+          ),
         },
       });
       map.addLayer({

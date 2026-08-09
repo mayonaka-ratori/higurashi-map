@@ -4,11 +4,12 @@ type ExternalRecord = NonNullable<Place["externalRecord"]>;
 
 export type Freshness = "today" | "recent3d" | "season" | "none";
 
+// 塗り色は design-handoff/README.md「鮮度4段階」の確定値
 export const FRESHNESS_COLOR: Record<Freshness, string> = {
-  today: "#16a34a", // 🟢 今日確認
-  recent3d: "#eab308", // 🟡 3日以内
-  season: "#e2e8f0", // ⚪ 今シーズン
-  none: "#64748b", // ⚫ 記録なし
+  today: "#059669", // 🟢 今日確認
+  recent3d: "#f59e0b", // 🟡 3日以内
+  season: "#ffffff", // ⚪ 今シーズン（白塗り+グレー縁）
+  none: "#94a3b8", // ⚫ 記録なし（薄く沈ませる）
 };
 
 export const FRESHNESS_LABEL: Record<Freshness, string> = {
