@@ -245,16 +245,6 @@ export function agoText(d: Date, now: Date): string {
   return days === 1 ? "昨日" : `${days}日前`;
 }
 
-export function timeText(d: Date, now: Date): string {
-  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const days = Math.floor(
-    (startOfDay(now).getTime() - startOfDay(d).getTime()) / DAY
-  );
-  if (days <= 0) return `今日 ${hm}`;
-  if (days === 1) return `昨日 ${hm}`;
-  return `${days}日前`;
-}
-
 export function distanceKm(
   lat1: number,
   lng1: number,

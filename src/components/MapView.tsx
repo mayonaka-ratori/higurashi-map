@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useRef } from "react";
+import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Place } from "@/lib/types";
@@ -83,7 +83,13 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
+  // 現在地ボタンをいまどの隅に置いているか。variant切り替え時の付け替え判定に使う
+  const geoCornerRef = useRef<"top-left" | "bottom-left">("bottom-left");
+  const navRef = useRef<maplibregl.NavigationControl | null>(null);
   const readyRef = useRef(false);
+  // load完了をstateでも持ち、load前に走って空振りした下のeffect群を再実行させる
+  // （共有リンクの ?place= は load より先に選択が確定する）
+  const [ready, setReady] = useState(false);
   // 今日のピンに出しているパルス（DOMマーカー）。地点IDで引く
   const pulsesRef = useRef<Map<string, maplibregl.Marker>>(new Map());
 
@@ -134,9 +140,13 @@ export default function MapView({
     }
     for (const p of ps) {
       if (!want.has(p.id) || pulsesRef.current.has(p.id)) continue;
-      const el = document.createElement("span");
-      el.className = "hig-pulse";
+      // MapLibreはマーカー要素自体の transform で位置を決めるため、
+      // 拡大アニメーションは入れ子の span に持たせる（外側に付けると位置が壊れる）
+      const el = document.createElement("div");
       el.style.pointerEvents = "none";
+      const inner = document.createElement("span");
+      inner.className = "hig-pulse";
+      el.appendChild(inner);
       const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat([p.lng, p.lat])
         .addTo(map);
@@ -166,28 +176,24 @@ export default function MapView({
         layers: [{ id: "gsi", type: "raster", source: "gsi" }],
       },
       center: [139.55, 35.83],
-      zoom: variant === "pc" ? 10 : 9.6,
+      zoom: dataRef.current.variant === "pc" ? 10 : 9.6,
       // glyphs を置かないので、文字はすべてブラウザ側で描かれる。
       // 日本語をこのフォントで出すために家族名を渡す（外部グリフサーバー不要）
       localIdeographFontFamily: FONT_STACK,
     });
     mapRef.current = map;
 
-    // PCは地図コントロールを左上に置く（検索欄と縦に並べない）。
-    // スマホはズームボタンを出さず、現在地だけ自前の◎ボタンから呼ぶ
-    if (variant === "pc") {
-      map.addControl(
-        new maplibregl.NavigationControl({ showCompass: false }),
-        "top-left"
-      );
-    }
+    // コントロール類はvariantで場所と有無が変わるため、下のvariant用effectで付ける。
+    // ここでは現在地コントロールを作るだけにする（◎ボタンから trigger で呼ぶ）
     const geolocate = new maplibregl.GeolocateControl({
       positionOptions: { enableHighAccuracy: true },
       trackUserLocation: true,
       showUserLocation: true,
     });
     geolocateRef.current = geolocate;
-    map.addControl(geolocate, variant === "pc" ? "top-left" : "bottom-left");
+    const corner = dataRef.current.variant === "pc" ? "top-left" : "bottom-left";
+    map.addControl(geolocate, corner);
+    geoCornerRef.current = corner;
     geolocate.on("geolocate", (e) => {
       cb.current.onUserLocate(e.coords.latitude, e.coords.longitude);
     });
@@ -268,11 +274,11 @@ export default function MapView({
         source: "places",
         // ズームを寄せたときだけ出す。text-field の step 式だと
         // レイアウトの再評価が整数ズームでしか起きず、9.8の境目が効かない
-        minzoom: variant === "pc" ? 9.8 : 10.4,
+        minzoom: dataRef.current.variant === "pc" ? 9.8 : 10.4,
         filter: TODAY_ONLY,
         layout: {
           "text-field": ["get", "label"],
-          "text-size": variant === "pc" ? 12 : 11,
+          "text-size": dataRef.current.variant === "pc" ? 12 : 11,
           "text-variable-anchor": ["left", "right"],
           "text-radial-offset": 1.4,
           "text-justify": "auto",
@@ -319,6 +325,7 @@ export default function MapView({
       map.on("moveend", () => applyLabelInset(map));
 
       readyRef.current = true;
+      setReady(true);
       (map.getSource("places") as maplibregl.GeoJSONSource).setData(
         toGeoJson(dataRef.current.places, dataRef.current.statsById)
       );
@@ -332,11 +339,48 @@ export default function MapView({
       map.remove();
       mapRef.current = null;
       geolocateRef.current = null;
+      navRef.current = null;
       readyRef.current = false;
+      setReady(false);
     };
-    // 初期化は1回だけ。データ更新は下のuseEffectで行う。
+    // 初期化は1回だけ。variantが変わっても作り直さない（作り直すと
+    // カメラ位置・選択・現在地追跡が全部消える）。差分は下のeffectで反映する
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variant]);
+  }, []);
+
+  // variantで違う部分だけ差し替える: ズームボタンの有無・現在地ボタンの位置・
+  // 地点名ラベルの出るズームと文字サイズ
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    // PCは地図コントロールを左上に置く（検索欄と縦に並べない）。
+    // スマホはズームボタンを出さず、現在地だけ自前の◎ボタンから呼ぶ
+    if (variant === "pc" && !navRef.current) {
+      navRef.current = new maplibregl.NavigationControl({ showCompass: false });
+      map.addControl(navRef.current, "top-left");
+    } else if (variant !== "pc" && navRef.current) {
+      map.removeControl(navRef.current);
+      navRef.current = null;
+    }
+    const corner = variant === "pc" ? "top-left" : "bottom-left";
+    const geolocate = geolocateRef.current;
+    if (geolocate && geoCornerRef.current !== corner) {
+      // 付け外しで移すため、追跡中に画面幅の境界をまたぐと追跡は一旦止まる
+      map.removeControl(geolocate);
+      map.addControl(geolocate, corner);
+      geoCornerRef.current = corner;
+    }
+    if (ready && map.getLayer("places-label")) {
+      map.setLayerZoomRange("places-label", variant === "pc" ? 9.8 : 10.4, 24);
+      map.setLayoutProperty(
+        "places-label",
+        "text-size",
+        variant === "pc" ? 12 : 11
+      );
+      applyLabelInset(map);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variant, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -346,7 +390,8 @@ export default function MapView({
     );
     syncPulses(map);
     applyLabelInset(map);
-  }, [places, statsById]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [places, statsById, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -356,7 +401,7 @@ export default function MapView({
       ["get", "id"],
       hoverId ?? "__none__",
     ]);
-  }, [hoverId]);
+  }, [hoverId, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -376,7 +421,7 @@ export default function MapView({
       offset: variant === "pc" ? [-202, 0] : [0, -110],
       duration: 700,
     });
-  }, [selectedId, places, variant]);
+  }, [selectedId, places, variant, ready]);
 
   // 注意: MapLibreはこのdivに position:relative を強制するため、
   // absolute+inset ではなく width/height 100% で大きさを与える

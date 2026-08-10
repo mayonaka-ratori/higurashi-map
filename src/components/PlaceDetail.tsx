@@ -436,7 +436,7 @@ export default function PlaceDetail(props: Props) {
           >
             今日ヒグラシを探している誰かの助けになります。
           </p>
-          {postState.heard && (
+          {postState.heard && !postState.backdated && (
             <p
               style={{
                 margin: pc ? "9px 0 0" : "8px 0 0",

@@ -81,6 +81,11 @@ export default function App() {
   const [reports, setReports] = useState<Report[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [loadError, setLoadError] = useState(false);
+  // 静的に作られたHTMLにはビルド時の時刻が焼き付いている。時刻入りのUIを
+  // そのまま出すとハイドレーションが毎回失敗して全体を描き直すことになるため、
+  // マウント完了までは時刻を含まない外枠だけを出す
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const [variant, setVariant] = useState<"pc" | "sp">("sp");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -211,7 +216,8 @@ export default function App() {
   );
 
   const vm = useMemo<AnswerVM>(() => {
-    const nearWord = userPos ? "を近い順に" : "を";
+    // 「近い順」を名乗るのは、並びが実際に近い順のときだけ（おすすめ順のままでは嘘になる）
+    const nearWord = effSort === "near" ? "を近い順に" : "を";
     if (answer) {
       const c = answer.s.todayReports.find((r) => r.heard && r.comment)?.comment;
       return {
@@ -234,7 +240,7 @@ export default function App() {
     const emptyLead = todayOnes.length
       ? `今日届いているのは ${heardToday} 件だけです。下は実績のある場所${nearWord}出しています。`
       : !restHasRecords
-        ? userPos
+        ? effSort === "near"
           ? "下は現在地から近い場所です。行って聞こえたら、その場で教えてください。"
           : "下はいま期待できる場所です。行って聞こえたら、その場で教えてください。"
         : win?.daytime
@@ -257,7 +263,7 @@ export default function App() {
       footnote:
         "今日の一件目になれます。聞こえなかったときも「静かだった」を押すと、次の人の役に立ちます。",
     };
-  }, [answer, todayOnes.length, restHasRecords, todayReports, win, now, userPos]);
+  }, [answer, todayOnes.length, restHasRecords, todayReports, win, now, effSort]);
 
   const normalize = (s: string) => s.normalize("NFKC").toLowerCase();
   const searchResults = useMemo(() => {
@@ -325,7 +331,10 @@ export default function App() {
         markPosted(placeId);
         setComment("");
         setShowComment(false);
-        setPostState({ kind: "done", heard });
+        // 昨日以前の後追い投稿はピンが🟢（今日）にならないので、完了カードに伝える
+        const today0 = new Date();
+        today0.setHours(0, 0, 0, 0);
+        setPostState({ kind: "done", heard, backdated: !!at && at < today0 });
         await reload();
       } catch {
         setPostState({
@@ -412,11 +421,32 @@ export default function App() {
             flex: "none",
           }}
         >
-          {hm(now)}
+          {/* ビルド時の時刻が静的HTMLに残らないよう、マウント前は空にする */}
+          {mounted ? hm(now) : ""}
         </span>
       )}
     </div>
   );
+
+  // マウント前（静的HTMLとハイドレーション直後の1描画目）は、
+  // 時刻で内容が変わる部品を出さない。出すとビルド時の時刻と食い違って
+  // ハイドレーションが失敗し、毎回コンソールエラーと描き直しが起きる
+  if (!mounted) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: C.mapBg,
+        }}
+      >
+        {header}
+      </div>
+    );
+  }
 
   const searchBox = (
     <div

@@ -13,7 +13,8 @@ export type Ranked = {
 export type PostState =
   | { kind: "idle" }
   | { kind: "sending"; heard: boolean }
-  | { kind: "done"; heard: boolean }
+  // backdated: 昨日以前の後追い投稿。ピンは🟢（今日）にならないので完了カードの文言を変える
+  | { kind: "done"; heard: boolean; backdated?: boolean }
   | { kind: "error"; heard: boolean; message: string };
 
 // 答えのブロックに出すもの。答えが立たない日は isEmpty が true になり、
