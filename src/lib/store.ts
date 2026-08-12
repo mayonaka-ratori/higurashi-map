@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { NewReport, Report } from "./types";
+import { seasonStart } from "./season";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -11,12 +12,6 @@ export const demoMode = !url || !anonKey;
 let supabase: SupabaseClient | null = null;
 if (!demoMode) {
   supabase = createClient(url!, anonKey!);
-}
-
-// シーズン開始日（6月1日）。これより前の投稿は取得しない。
-export function seasonStart(now: Date): Date {
-  const juneFirst = new Date(now.getFullYear(), 5, 1);
-  return now >= juneFirst ? juneFirst : new Date(now.getFullYear() - 1, 5, 1);
 }
 
 const DEMO_KEY = "higurashi-demo-reports";

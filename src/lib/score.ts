@@ -1,16 +1,9 @@
 import type { Place, Report } from "./types";
+import { seasonStart } from "./season";
 
 type ExternalRecord = NonNullable<Place["externalRecord"]>;
 
 export type Freshness = "today" | "recent3d" | "season" | "none";
-
-// 塗り色は design-handoff/README.md「鮮度4段階」の確定値
-export const FRESHNESS_COLOR: Record<Freshness, string> = {
-  today: "#059669", // 🟢 今日確認
-  recent3d: "#f59e0b", // 🟡 3日以内
-  season: "#ffffff", // ⚪ 今シーズン（白塗り+グレー縁）
-  none: "#94a3b8", // ⚫ 記録なし（薄く沈ませる）
-};
 
 export const FRESHNESS_LABEL: Record<Freshness, string> = {
   today: "今日確認",
@@ -42,12 +35,6 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-// シーズン開始日（6月1日）。store.ts と同じ定義
-function seasonStartOf(now: Date): Date {
-  const june1 = new Date(now.getFullYear(), 5, 1);
-  return now >= june1 ? june1 : new Date(now.getFullYear() - 1, 5, 1);
-}
-
 // 外部記録の日付を解釈する。今シーズン外・未来・形式不正は null
 function parseExternal(
   rec: ExternalRecord,
@@ -55,13 +42,25 @@ function parseExternal(
 ): { kind: "exact"; daysAgo: number } | { kind: "monthOnly" } | null {
   const m = /^(\d{4})-(\d{2})-(\d{2}|XX)$/.exec(rec.date);
   if (!m) return null;
-  const season0 = seasonStartOf(now);
+  const season0 = seasonStart(now);
   if (m[3] === "XX") {
-    const monthStart = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    if (month < 1 || month > 12) return null;
+    const monthStart = new Date(year, month - 1, 1);
+    if (monthStart.getFullYear() !== year || monthStart.getMonth() !== month - 1) {
+      return null;
+    }
     if (monthStart < season0 || monthStart > now) return null;
     return { kind: "monthOnly" };
   }
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) {
+    return null;
+  }
+  const d = new Date(year, month - 1, day);
   if (d < season0 || startOfDay(d) > startOfDay(now)) return null;
   const daysAgo = Math.round(
     (startOfDay(now).getTime() - startOfDay(d).getTime()) / DAY
@@ -79,7 +78,7 @@ const FRESHNESS_RANK: Record<Freshness, number> = {
 // 仕様書のルールベース期待度をそのまま実装したもの。
 // 30分以内+30 / 3時間以内+10 / 24時間以内+5 / 複数人確認+20 /
 // GPS高精度+10 / 聞こえなかった-5
-// 外部記録は底上げのみ: 3日以内+10 / シーズン内+5（外部記録だけでは★2まで）
+// 外部記録は底上げのみ: 3日以内+10 / シーズン内+5（外部記録だけでは♪2まで）
 export function placeStats(
   reports: Report[],
   now: Date,
@@ -243,16 +242,6 @@ export function agoText(d: Date, now: Date): string {
     (startOfDay(now).getTime() - startOfDay(d).getTime()) / DAY
   );
   return days === 1 ? "昨日" : `${days}日前`;
-}
-
-export function timeText(d: Date, now: Date): string {
-  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const days = Math.floor(
-    (startOfDay(now).getTime() - startOfDay(d).getTime()) / DAY
-  );
-  if (days <= 0) return `今日 ${hm}`;
-  if (days === 1) return `昨日 ${hm}`;
-  return `${days}日前`;
 }
 
 export function distanceKm(

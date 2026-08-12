@@ -76,7 +76,11 @@ async function post(ql) {
       });
       if (res.ok) return res.json();
       last = "HTTP " + res.status;
-      if (res.status === 400) return null;
+      // 400はこちらの検索条件の問題なので、別のサーバーに再試行しても直らない
+      if (res.status === 400) {
+        last = "HTTP 400（検索条件を受け付けませんでした）";
+        break;
+      }
     } catch (e) {
       last = e.name === "TimeoutError" ? "timeout" : e.message;
     }

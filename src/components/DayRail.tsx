@@ -79,7 +79,7 @@ export default function DayRail({ now, win, todayReports, variant }: Props) {
             fontSize: m.stateSize,
             fontWeight: 700,
             letterSpacing: ".02em",
-            color: win.tone === "now" ? C.nowTone : "#d1fae5",
+            color: win.tone === "now" ? C.nowTone : C.calmTone,
           }}
         >
           {win.state}

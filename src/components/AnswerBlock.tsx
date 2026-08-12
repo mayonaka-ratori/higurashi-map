@@ -144,7 +144,7 @@ export default function AnswerBlock({
               style={{
                 margin: "11px 0 0",
                 paddingLeft: 12,
-                borderLeft: `2px solid #a7f3d0`,
+                borderLeft: `2px solid ${C.softAccent}`,
                 fontSize: 13,
                 color: "#334155",
                 lineHeight: 1.65,
@@ -412,6 +412,7 @@ export default function AnswerBlock({
         {sortRow}
       </div>
       <div
+        className="hig-scroll-x"
         style={{
           display: "flex",
           gap: 10,

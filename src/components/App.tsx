@@ -17,25 +17,28 @@ import {
 import {
   distanceKm,
   hm,
-  notesLabel,
-  notesText,
   placeStats,
   rankScore,
-  reasonText,
   type PlaceStats,
 } from "@/lib/score";
 import { listeningWindows, type ListeningState } from "@/lib/sun";
-import { C, dotStyle, notesStyle } from "@/lib/design";
-import { placeLineText, type AnswerVM, type PostState, type Ranked } from "@/lib/view";
+import { C } from "@/lib/design";
+import {
+  buildAnswerVM,
+  type PostState,
+  type Ranked,
+} from "@/lib/view";
 import DayRail from "./DayRail";
 import AnswerBlock from "./AnswerBlock";
 import PlaceDetail from "./PlaceDetail";
 import QuickPostSheet, { type LaterAt } from "./QuickPostSheet";
 import type { MapHandle } from "./MapView";
+import MapOverlay from "./MapOverlay";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
 const places = placesJson as Place[];
+const INITIAL_NOW = new Date(2000, 0, 1);
 
 // 現在地が取れないときの日の入り計算の基準（埼玉南部）。
 // 関東の中なら数分しか変わらないので、聞きどきの目安には足りる
@@ -79,7 +82,7 @@ function laterTime(t: LaterAt, now: Date, win: ListeningState | null): Date {
 
 export default function App() {
   const [reports, setReports] = useState<Report[]>([]);
-  const [now, setNow] = useState(() => new Date());
+  const [clock, setClock] = useState<Date | null>(null);
   const [loadError, setLoadError] = useState(false);
 
   const [variant, setVariant] = useState<"pc" | "sp">("sp");
@@ -96,11 +99,15 @@ export default function App() {
   const [laterAt, setLaterAt] = useState<LaterAt>("さっき");
 
   const mapRef = useRef<MapHandle | null>(null);
+  const reloadSeq = useRef(0);
   const lastPost = useRef<{ heard: boolean; placeId: string; at?: Date } | null>(
     null
   );
 
   const pc = variant === "pc";
+  // サーバーとブラウザで現在時刻がずれないよう、最初は固定値にする。
+  // 実際の時計は画面が開いてから reload で入れる。
+  const now = clock ?? INITIAL_NOW;
 
   // 画面幅で組み方を変える。PCは右パネル、それ以外は下端のカード。
   // 端末の回転やウィンドウの拡縮でも切り替わるよう resize も見る
@@ -123,13 +130,16 @@ export default function App() {
   }, []);
 
   const reload = useCallback(async () => {
+    const requestId = ++reloadSeq.current;
+    const n = new Date();
+    setClock(n);
     try {
-      const n = new Date();
-      setNow(n);
-      setReports(await fetchReports(n));
+      const nextReports = await fetchReports(n);
+      if (requestId !== reloadSeq.current) return;
+      setReports(nextReports);
       setLoadError(false);
     } catch {
-      setLoadError(true);
+      if (requestId === reloadSeq.current) setLoadError(true);
     }
   }, []);
 
@@ -154,13 +164,15 @@ export default function App() {
   }, [reports, now]);
 
   const win = useMemo(
-    () =>
-      listeningWindows(
+    () => {
+      if (!clock) return null;
+      return listeningWindows(
         now,
         userPos?.lat ?? FALLBACK_ORIGIN.lat,
         userPos?.lng ?? FALLBACK_ORIGIN.lng
-      ),
-    [now, userPos]
+      );
+    },
+    [clock, now, userPos]
   );
 
   // 今日届いた報告（全地点ぶん）。時間帯レールに点で打つ
@@ -184,25 +196,27 @@ export default function App() {
       s: statsById[p.id],
       d: userPos ? distanceKm(userPos.lat, userPos.lng, p.lat, p.lng) : null,
     }));
-    if (effSort === "near") {
-      out.sort(
-        (a, b) => (a.d ?? 0) - (b.d ?? 0) || b.s.score - a.s.score
-      );
-    } else {
-      out.sort(
-        (a, b) =>
-          rankScore(b.s, b.d) - rankScore(a.s, a.d) || (a.d ?? 0) - (b.d ?? 0)
-      );
-    }
+    out.sort(
+      (a, b) =>
+        rankScore(b.s, b.d) - rankScore(a.s, a.d) || (a.d ?? 0) - (b.d ?? 0)
+    );
     return out;
-  }, [statsById, userPos, effSort]);
+  }, [statsById, userPos]);
+
+  // 答えはおすすめ順で固定し、一覧だけを切り替える。
+  const displayRanked = useMemo(() => {
+    if (effSort !== "near") return ranked;
+    return [...ranked].sort(
+      (a, b) => (a.d ?? 0) - (b.d ?? 0) || b.s.score - a.s.score
+    );
+  }, [effSort, ranked]);
 
   // 答え・候補・見出しはここで一緒に決める。画面が嘘をつかないように、
   // 実績のない行を「実績のある場所」の下に置かない
   const todayOnes = ranked.filter((r) => r.s.freshness === "today");
   const answer =
     todayOnes.length > 0 && todayOnes[0].s.stars >= 3 ? todayOnes[0] : null;
-  const others = ranked.filter((r) => !answer || r.p.id !== answer.p.id);
+  const others = displayRanked.filter((r) => !answer || r.p.id !== answer.p.id);
   const othersWithRecord = others.filter((r) => r.s.freshness !== "none");
   const restHasRecords = othersWithRecord.length > 0;
   const restPool = (restHasRecords ? othersWithRecord : others).slice(
@@ -210,63 +224,28 @@ export default function App() {
     pc ? 5 : 6
   );
 
-  const vm = useMemo<AnswerVM>(() => {
-    const nearWord = userPos ? "を近い順に" : "を";
-    if (answer) {
-      const c = answer.s.todayReports.find((r) => r.heard && r.comment)?.comment;
-      return {
-        isEmpty: false,
-        kicker: win?.active?.kind === "dawn" ? "今朝はここ" : "今夜はここ",
-        headline: answer.p.name,
-        placeLine: placeLineText(answer, "ここから "),
-        notes: notesText(answer.s.stars),
-        notesLabel: `期待度・${notesLabel(answer.s.stars)}`,
-        reason: reasonText(answer.s, now),
-        comment: c ? `「${c}」` : null,
-        emptyLead: null,
-        openLabel: "この場所を見る",
-        restTitle: restHasRecords ? "ほかの候補" : "近くの場所",
-        footnote:
-          "近さも考えに入れて並べています。♪ は「どれだけ鳴いていそうか」の目安です。",
-      };
-    }
-    const heardToday = todayReports.filter((r) => r.heard).length;
-    const emptyLead = todayOnes.length
-      ? `今日届いているのは ${heardToday} 件だけです。下は実績のある場所${nearWord}出しています。`
-      : !restHasRecords
-        ? userPos
-          ? "下は現在地から近い場所です。行って聞こえたら、その場で教えてください。"
-          : "下はいま期待できる場所です。行って聞こえたら、その場で教えてください。"
-        : win?.daytime
-          ? "曇りの日や暗い林なら日中でも鳴きます。下は今シーズン鳴いた実績のある場所です。"
-          : `夜明けと日の入りの前後30分が聞きどきです。下は実績のある場所${nearWord}出しています。`;
-    return {
-      isEmpty: true,
-      kicker: "きょうの状況",
-      headline: todayOnes.length
-        ? "確かなことは、まだ言えません"
-        : "今日はまだ誰も聞いていません",
-      placeLine: null,
-      notes: "",
-      notesLabel: "",
-      reason: "",
-      comment: null,
-      emptyLead,
-      openLabel: "近い順にならべる",
-      restTitle: restHasRecords ? "実績のある場所" : "近くの場所",
-      footnote:
-        "今日の一件目になれます。聞こえなかったときも「静かだった」を押すと、次の人の役に立ちます。",
-    };
-  }, [answer, todayOnes.length, restHasRecords, todayReports, win, now, userPos]);
+  const vm = useMemo(
+    () =>
+      buildAnswerVM({
+        answer,
+        hasTodayReports: todayReports.length > 0,
+        todayReportCount: todayReports.length,
+        restHasRecords,
+        hasLocation: !!userPos,
+        win,
+        now,
+      }),
+    [answer, now, restHasRecords, todayReports.length, userPos, win]
+  );
 
   const normalize = (s: string) => s.normalize("NFKC").toLowerCase();
   const searchResults = useMemo(() => {
     const q = normalize(query.trim());
     if (!q) return null;
-    return ranked
+    return displayRanked
       .filter((r) => normalize(`${r.p.name} ${r.p.city} ${r.p.pref}`).includes(q))
       .slice(0, 8);
-  }, [query, ranked]);
+  }, [displayRanked, query]);
 
   const nearest3 = useMemo(
     () =>
@@ -280,7 +259,7 @@ export default function App() {
     ? (places.find((p) => p.id === selectedId) ?? null)
     : null;
   const selectedRanked = selected
-    ? (ranked.find((r) => r.p.id === selected.id) ?? null)
+    ? (displayRanked.find((r) => r.p.id === selected.id) ?? null)
     : null;
 
   const selectPlace = useCallback((id: string | null) => {
@@ -369,8 +348,73 @@ export default function App() {
     [userPos]
   );
 
-  const hoverPlace = hoverId ? places.find((p) => p.id === hoverId) : null;
+  const hoverPlace = hoverId
+    ? (places.find((p) => p.id === hoverId) ?? null)
+    : null;
   const hoverStats = hoverId ? statsById[hoverId] : null;
+
+  const answerBlock = win ? (
+    <AnswerBlock
+      variant={variant}
+      vm={vm}
+      rest={restPool}
+      now={now}
+      sort={effSort}
+      onSort={onSort}
+      onOpen={() => (answer ? selectPlace(answer.p.id) : onSort("near"))}
+      onOpenQuick={() => openQuick("now")}
+      onSelect={selectPlace}
+      onHover={(id) => {
+        if (!pc) return;
+        setHoverId(id);
+        setHoverPt(null);
+      }}
+    />
+  ) : null;
+
+  const selectedDetail = selected && selectedRanked && win ? (
+    <PlaceDetail
+      variant={variant}
+      place={selected}
+      stats={selectedRanked.s}
+      dist={selectedRanked.d}
+      now={now}
+      railState={win.state}
+      postState={postState}
+      comment={comment}
+      showComment={showComment}
+      shareUrl={xShareUrl(selected, false)}
+      doneShareUrl={xShareUrl(selected, true)}
+      onComment={setComment}
+      onOpenComment={() => setShowComment(true)}
+      onPost={(heard) =>
+        doPost({ heard, placeId: selected.id, withComment: true })
+      }
+      onRetry={() =>
+        lastPost.current && doPost({ ...lastPost.current, withComment: true })
+      }
+      onCloseDone={() => setPostState({ kind: "idle" })}
+      onOpenLater={() => openQuick("later")}
+      onClose={() => selectPlace(null)}
+    />
+  ) : null;
+
+  const quickSheet = quick ? (
+    <QuickPostSheet
+      variant={variant}
+      mode={quick}
+      near={nearest3}
+      hasLocation={!!userPos}
+      laterAt={laterAt}
+      onPickTime={setLaterAt}
+      onPost={quickPost}
+      onPickOnMap={() => {
+        setQuick(null);
+        setSelectedId(null);
+      }}
+      onClose={() => setQuick(null)}
+    />
+  ) : null;
 
   // ── ここから画面
 
@@ -412,161 +456,9 @@ export default function App() {
             flex: "none",
           }}
         >
-          {hm(now)}
+          {clock ? hm(now) : ""}
         </span>
       )}
-    </div>
-  );
-
-  const searchBox = (
-    <div
-      style={{
-        position: "absolute",
-        pointerEvents: "auto",
-        ...(pc
-          ? { left: 68, top: 14, width: 300 }
-          : { left: 12, right: 12, top: 12 }),
-      }}
-    >
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={pc ? "地点名で探す（例: 見沼、高尾）" : "地点名で探す"}
-        aria-label="地点名で探す"
-        style={{
-          width: "100%",
-          padding: pc ? "11px 14px" : "12px 14px",
-          border: pc ? "1px solid rgba(15,23,42,.12)" : 0,
-          borderRadius: 11,
-          // スマホは16px未満だと iOS Safari が勝手にズームする
-          fontSize: pc ? 14 : 16,
-          color: C.ink,
-          outline: "none",
-          background: "rgba(255,255,255,.97)",
-          boxShadow: `0 2px 12px rgba(15,23,42,${pc ? ".14" : ".2"})`,
-          fontFamily: "inherit",
-        }}
-      />
-      {searchResults && (
-        <ul
-          style={{
-            margin: "8px 0 0",
-            padding: 0,
-            listStyle: "none",
-            background: "rgba(255,255,255,.98)",
-            borderRadius: 11,
-            boxShadow: `0 4px 18px rgba(15,23,42,${pc ? ".18" : ".22"})`,
-            overflow: "hidden",
-            maxHeight: pc ? 320 : 300,
-            overflowY: "auto",
-          }}
-        >
-          {searchResults.map((r) => (
-            <li key={r.p.id}>
-              <button
-                onClick={() => selectPlace(r.p.id)}
-                style={{
-                  display: "flex",
-                  width: "100%",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: pc ? "11px 13px" : 13,
-                  background: "none",
-                  border: 0,
-                  borderBottom: `1px solid ${C.hairline}`,
-                  textAlign: "left",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <span style={dotStyle(r.s.freshness, 11)} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span
-                    style={{
-                      display: "block",
-                      fontSize: pc ? 14 : 15,
-                      fontWeight: 700,
-                      color: C.ink,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {r.p.name}
-                  </span>
-                  <span
-                    style={{
-                      display: "block",
-                      marginTop: 2,
-                      fontSize: 11,
-                      color: C.muted,
-                    }}
-                  >
-                    {placeLineText(r)}
-                  </span>
-                </span>
-                <span style={notesStyle(pc ? 14 : 13)}>
-                  {notesText(r.s.stars)}
-                </span>
-              </button>
-            </li>
-          ))}
-          {searchResults.length === 0 && (
-            <li
-              style={{
-                padding: "16px 14px",
-                fontSize: 13,
-                color: C.muted,
-                lineHeight: 1.7,
-              }}
-            >
-              見つかりませんでした。別の言い方で探すか、地図から選んでください。
-            </li>
-          )}
-        </ul>
-      )}
-    </div>
-  );
-
-  const legend = (
-    <div
-      style={{
-        position: "absolute",
-        left: 16,
-        // 地図の出典表示（左下）に重ねないぶんだけ上げる
-        bottom: 44,
-        pointerEvents: "auto",
-        background: "rgba(255,255,255,.96)",
-        border: `1px solid ${C.border2}`,
-        borderRadius: 11,
-        padding: "10px 14px",
-        boxShadow: "0 3px 14px rgba(15,23,42,.12)",
-        display: "flex",
-        gap: 16,
-      }}
-    >
-      {(
-        [
-          ["today", "今日", C.ink],
-          ["recent3d", "3日内", C.slateBtnHover],
-          ["season", "今季", C.slateBtn],
-          ["none", "記録なし", C.muted],
-        ] as const
-      ).map(([f, label, color]) => (
-        <span
-          key={f}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: 12,
-            color,
-          }}
-        >
-          <span style={dotStyle(f, f === "today" ? 16 : f === "recent3d" ? 13 : 11)} />
-          {label}
-        </span>
-      ))}
     </div>
   );
 
@@ -594,106 +486,23 @@ export default function App() {
             setHoverPt(pt);
           }}
           onUserLocate={(lat, lng) => setUserPos({ lat, lng })}
+          onLocateStart={() => setSort("near")}
         />
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          zIndex: 1200,
-        }}
-      >
-        {searchBox}
-        {pc && legend}
-        {!pc && (
-          <>
-            <button
-              onClick={() => mapRef.current?.locate()}
-              aria-label="現在地から近い場所を探す"
-              style={{
-                position: "absolute",
-                right: 12,
-                top: 76,
-                pointerEvents: "auto",
-                width: 46,
-                height: 46,
-                border: 0,
-                borderRadius: 14,
-                background: "rgba(255,255,255,.97)",
-                color: C.slateBtnHover,
-                fontSize: 19,
-                lineHeight: 1,
-                cursor: "pointer",
-                boxShadow: "0 2px 10px rgba(15,23,42,.22)",
-              }}
-            >
-              ◎
-            </button>
-            <button
-              onClick={() => openQuick("now")}
-              style={{
-                position: "absolute",
-                right: 12,
-                bottom: 14,
-                pointerEvents: "auto",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "15px 18px",
-                border: 0,
-                borderRadius: 16,
-                background: C.green,
-                color: C.white,
-                fontFamily: "inherit",
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: "pointer",
-                boxShadow: "0 5px 18px rgba(5,150,105,.42)",
-              }}
-            >
-              🌲 いま聞こえた
-            </button>
-          </>
-        )}
-
-        {pc && hoverPlace && hoverStats && hoverPt && (
-          <div
-            style={{
-              position: "absolute",
-              left: hoverPt.x,
-              top: hoverPt.y - 16,
-              transform: "translate(-50%,-100%)",
-              background: C.white,
-              border: `1px solid ${C.border2}`,
-              borderRadius: 10,
-              padding: "9px 13px",
-              boxShadow: "0 6px 20px rgba(15,23,42,.2)",
-              pointerEvents: "none",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>
-              {hoverPlace.name}
-            </div>
-            <div
-              style={{
-                marginTop: 4,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <span style={dotStyle(hoverStats.freshness, 10)} />
-              <span style={{ fontSize: 12, color: C.slateBtn }}>
-                {reasonText(hoverStats, now)}
-              </span>
-              <span style={notesStyle(12)}>{notesText(hoverStats.stars)}</span>
-            </div>
-          </div>
-        )}
-      </div>
+      <MapOverlay
+        variant={variant}
+        query={query}
+        onQuery={setQuery}
+        searchResults={searchResults}
+        onSelect={selectPlace}
+        onLocate={() => mapRef.current?.locate()}
+        onOpenQuick={() => openQuick("now")}
+        now={now}
+        hoverPlace={hoverPlace}
+        hoverStats={hoverStats}
+        hoverPt={hoverPt}
+      />
 
       {/* PCの右パネル。地図は全幅のまま、上に重ねる */}
       {pc && (
@@ -710,68 +519,9 @@ export default function App() {
             flexDirection: "column",
           }}
         >
-          {win && (
-            <AnswerBlock
-              variant="pc"
-              vm={vm}
-              rest={restPool}
-              now={now}
-              sort={effSort}
-              onSort={onSort}
-              onOpen={() =>
-                answer ? selectPlace(answer.p.id) : onSort("near")
-              }
-              onOpenQuick={() => openQuick("now")}
-              onSelect={selectPlace}
-              onHover={(id) => {
-                setHoverId(id);
-                setHoverPt(null);
-              }}
-            />
-          )}
-          {selected && selectedRanked && win && (
-            <PlaceDetail
-              variant="pc"
-              place={selected}
-              stats={selectedRanked.s}
-              dist={selectedRanked.d}
-              now={now}
-              railState={win.state}
-              postState={postState}
-              comment={comment}
-              showComment={showComment}
-              shareUrl={xShareUrl(selected, false)}
-              doneShareUrl={xShareUrl(selected, true)}
-              onComment={setComment}
-              onOpenComment={() => setShowComment(true)}
-              onPost={(heard) =>
-                doPost({ heard, placeId: selected.id, withComment: true })
-              }
-              onRetry={() =>
-                lastPost.current &&
-                doPost({ ...lastPost.current, withComment: true })
-              }
-              onCloseDone={() => setPostState({ kind: "idle" })}
-              onOpenLater={() => openQuick("later")}
-              onClose={() => selectPlace(null)}
-            />
-          )}
-          {quick && (
-            <QuickPostSheet
-              variant="pc"
-              mode={quick}
-              near={nearest3}
-              hasLocation={!!userPos}
-              laterAt={laterAt}
-              onPickTime={setLaterAt}
-              onPost={quickPost}
-              onPickOnMap={() => {
-                setQuick(null);
-                setSelectedId(null);
-              }}
-              onClose={() => setQuick(null)}
-            />
-          )}
+          {answerBlock}
+          {selectedDetail}
+          {quickSheet}
         </div>
       )}
     </div>
@@ -808,8 +558,8 @@ export default function App() {
         <div
           style={{
             flex: "none",
-            background: "#fef2f2",
-            color: "#991b1b",
+            background: C.dangerBg,
+            color: C.danger,
             padding: "6px 14px",
             fontSize: 12,
             lineHeight: 1.5,
@@ -857,64 +607,13 @@ export default function App() {
               }}
             />
           </div>
-          <AnswerBlock
-            variant="sp"
-            vm={vm}
-            rest={restPool}
-            now={now}
-            sort={effSort}
-            onSort={onSort}
-            onOpen={() => (answer ? selectPlace(answer.p.id) : onSort("near"))}
-            onOpenQuick={() => openQuick("now")}
-            onSelect={selectPlace}
-            onHover={() => {}}
-          />
+          {answerBlock}
         </div>
       )}
 
-      {!pc && selected && selectedRanked && win && (
-        <PlaceDetail
-          variant="sp"
-          place={selected}
-          stats={selectedRanked.s}
-          dist={selectedRanked.d}
-          now={now}
-          railState={win.state}
-          postState={postState}
-          comment={comment}
-          showComment={showComment}
-          shareUrl={xShareUrl(selected, false)}
-          doneShareUrl={xShareUrl(selected, true)}
-          onComment={setComment}
-          onOpenComment={() => setShowComment(true)}
-          onPost={(heard) =>
-            doPost({ heard, placeId: selected.id, withComment: true })
-          }
-          onRetry={() =>
-            lastPost.current && doPost({ ...lastPost.current, withComment: true })
-          }
-          onCloseDone={() => setPostState({ kind: "idle" })}
-          onOpenLater={() => openQuick("later")}
-          onClose={() => selectPlace(null)}
-        />
-      )}
+      {!pc && selectedDetail}
 
-      {!pc && quick && (
-        <QuickPostSheet
-          variant="sp"
-          mode={quick}
-          near={nearest3}
-          hasLocation={!!userPos}
-          laterAt={laterAt}
-          onPickTime={setLaterAt}
-          onPost={quickPost}
-          onPickOnMap={() => {
-            setQuick(null);
-            setSelectedId(null);
-          }}
-          onClose={() => setQuick(null)}
-        />
-      )}
+      {!pc && quickSheet}
     </div>
   );
 }

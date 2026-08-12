@@ -67,6 +67,39 @@ body {
   display: none;
 }
 
+/* 現在地は22pxの淡い円と12pxの青い点で表示する */
+.hig-map .maplibregl-user-location-dot {
+  width: 12px;
+  height: 12px;
+  background: var(--hig-locate);
+}
+.hig-map .maplibregl-user-location-dot::before {
+  width: 22px;
+  height: 22px;
+  left: -5px;
+  top: -5px;
+  background: color-mix(in srgb, var(--hig-locate) 22%, transparent);
+  animation: none;
+}
+.hig-map .maplibregl-user-location-dot::after {
+  width: 16px;
+  height: 16px;
+  left: -2px;
+  top: -2px;
+  border-color: #fff;
+  box-shadow: none;
+}
+
+.hig-scroll-x {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hig-scroll-x::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 ::-webkit-scrollbar {
   width: 9px;
   height: 9px;

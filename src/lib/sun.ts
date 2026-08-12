@@ -10,30 +10,61 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-// 日の入り時刻のざっくり計算（誤差±15分程度）
-export function sunsetDate(now: Date, lat: number, lng: number): Date | null {
-  const start = new Date(now.getFullYear(), 0, 0);
-  const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+type SolarTimes = { sunrise: Date; sunset: Date };
+
+// NOAAの近似式。大気差（90.833度）と均時差を入れ、日の入りのずれを抑える。
+function solarTimes(now: Date, lat: number, lng: number): SolarTimes | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const date = now.getDate();
+  const dayOfYear =
+    Math.floor(
+      (Date.UTC(year, month, date) - Date.UTC(year, 0, 0)) / (24 * 60 * 60 * 1000)
+    );
+  const gamma = (2 * Math.PI) / 365 * (dayOfYear - 1);
   const decl =
-    ((-23.44 * Math.PI) / 180) *
-    Math.cos(((2 * Math.PI) / 365) * (dayOfYear + 10));
-  const cosH = -Math.tan((lat * Math.PI) / 180) * Math.tan(decl);
-  if (cosH < -1 || cosH > 1) return null;
-  const hourAngle = (Math.acos(cosH) * 180) / Math.PI / 15;
-  // 日本標準時の基準経線は東経135度
-  const sunset = 12 - (lng - 135) / 15 + hourAngle;
-  const d = startOfDay(now);
-  d.setMinutes(Math.round(sunset * 60));
-  return d;
+    0.006918 -
+    0.399912 * Math.cos(gamma) +
+    0.070257 * Math.sin(gamma) -
+    0.006758 * Math.cos(2 * gamma) +
+    0.000907 * Math.sin(2 * gamma) -
+    0.002697 * Math.cos(3 * gamma) +
+    0.00148 * Math.sin(3 * gamma);
+  const equationOfTime =
+    229.18 *
+    (0.000075 +
+      0.001868 * Math.cos(gamma) -
+      0.032077 * Math.sin(gamma) -
+      0.014615 * Math.cos(2 * gamma) -
+      0.040849 * Math.sin(2 * gamma));
+  const latitude = (lat * Math.PI) / 180;
+  const zenith = (90.833 * Math.PI) / 180;
+  const cosHourAngle =
+    (Math.cos(zenith) - Math.sin(latitude) * Math.sin(decl)) /
+    (Math.cos(latitude) * Math.cos(decl));
+  if (cosHourAngle < -1 || cosHourAngle > 1) return null;
+
+  const hourAngle = (Math.acos(cosHourAngle) * 180) / Math.PI;
+  const timezoneHours = -now.getTimezoneOffset() / 60;
+  const solarNoon = 720 - 4 * lng - equationOfTime + timezoneHours * 60;
+  const dayStart = startOfDay(now);
+  const atMinutes = (minutes: number) =>
+    new Date(dayStart.getTime() + Math.round(minutes) * MIN);
+
+  return {
+    sunrise: atMinutes(solarNoon - hourAngle * 4),
+    sunset: atMinutes(solarNoon + hourAngle * 4),
+  };
 }
 
-// 夜明けは日の入りと同じ式の対称側（南中時刻をはさんだ反対側）から出す
+export function sunsetDate(now: Date, lat: number, lng: number): Date | null {
+  return solarTimes(now, lat, lng)?.sunset ?? null;
+}
+
 export function sunriseDate(now: Date, lat: number, lng: number): Date | null {
-  const sunset = sunsetDate(now, lat, lng);
-  if (!sunset) return null;
-  const solarNoon = startOfDay(now);
-  solarNoon.setMinutes(Math.round((12 - (lng - 135) / 15) * 60));
-  return new Date(solarNoon.getTime() - (sunset.getTime() - solarNoon.getTime()));
+  return solarTimes(now, lat, lng)?.sunrise ?? null;
 }
 
 export type ListeningWindow = {

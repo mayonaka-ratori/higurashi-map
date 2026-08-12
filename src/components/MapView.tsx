@@ -5,8 +5,7 @@ import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Place } from "@/lib/types";
 import type { PlaceStats } from "@/lib/score";
-import { FRESHNESS_COLOR } from "@/lib/score";
-import { C, FONT_STACK, shortName } from "@/lib/design";
+import { C, FRESHNESS_COLOR, shortName } from "@/lib/design";
 
 export type MapHandle = {
   // スマホの◎ボタンから現在地取得を起こす（見た目は自前のボタン）
@@ -22,6 +21,7 @@ type Props = {
   onSelect: (id: string | null) => void;
   onHover: (id: string | null, point: { x: number; y: number } | null) => void;
   onUserLocate: (lat: number, lng: number) => void;
+  onLocateStart: () => void;
   ref?: React.Ref<MapHandle>;
 };
 
@@ -78,6 +78,7 @@ export default function MapView({
   onSelect,
   onHover,
   onUserLocate,
+  onLocateStart,
   ref,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -88,10 +89,10 @@ export default function MapView({
   const pulsesRef = useRef<Map<string, maplibregl.Marker>>(new Map());
 
   // イベントハンドラから常に最新のコールバックとデータを見るための参照
-  const cb = useRef({ onSelect, onHover, onUserLocate });
-  cb.current = { onSelect, onHover, onUserLocate };
-  const dataRef = useRef({ places, statsById, variant });
-  dataRef.current = { places, statsById, variant };
+  const cb = useRef({ onSelect, onHover, onUserLocate, onLocateStart });
+  cb.current = { onSelect, onHover, onUserLocate, onLocateStart };
+  const dataRef = useRef({ places, statsById, variant, selectedId });
+  dataRef.current = { places, statsById, variant, selectedId };
 
   // 親（スマホの◎ボタン）から現在地取得を呼べるようにする
   useImperativeHandle(
@@ -145,12 +146,13 @@ export default function MapView({
   }
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const container = containerRef.current;
+    if (!container || mapRef.current) return;
     // MapLibreのワーカー（ピン描画の計算役）はバンドラー経由だとURLが壊れるため、
     // publicに置いた実ファイルを明示的に指定する（copy-map-workerスクリプトが配置）
     maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
     const map = new maplibregl.Map({
-      container: containerRef.current,
+      container,
       style: {
         version: 8,
         sources: {
@@ -169,7 +171,7 @@ export default function MapView({
       zoom: variant === "pc" ? 10 : 9.6,
       // glyphs を置かないので、文字はすべてブラウザ側で描かれる。
       // 日本語をこのフォントで出すために家族名を渡す（外部グリフサーバー不要）
-      localIdeographFontFamily: FONT_STACK,
+      localIdeographFontFamily: getComputedStyle(container).fontFamily,
     });
     mapRef.current = map;
 
@@ -190,6 +192,11 @@ export default function MapView({
     map.addControl(geolocate, variant === "pc" ? "top-left" : "bottom-left");
     geolocate.on("geolocate", (e) => {
       cb.current.onUserLocate(e.coords.latitude, e.coords.longitude);
+    });
+    // geolocate は追跡中の位置更新でも繰り返し発火するため、
+    // ボタンを押した瞬間だけを知りたい側にはこちらを渡す
+    geolocate.on("trackuserlocationstart", () => {
+      cb.current.onLocateStart();
     });
 
     map.on("load", () => {
@@ -324,6 +331,7 @@ export default function MapView({
       );
       syncPulses(map);
       applyLabelInset(map);
+      syncSelected(map);
     });
 
     return () => {
@@ -337,6 +345,20 @@ export default function MapView({
     // 初期化は1回だけ。データ更新は下のuseEffectで行う。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variant]);
+
+  function syncSelected(map: maplibregl.Map) {
+    const id = dataRef.current.selectedId;
+    map.setFilter("places-selected", ["==", ["get", "id"], id ?? "__none__"]);
+    if (!id) return;
+    const p = dataRef.current.places.find((x) => x.id === id);
+    if (!p) return;
+    map.flyTo({
+      center: [p.lng, p.lat],
+      zoom: Math.max(map.getZoom(), 11.5),
+      offset: dataRef.current.variant === "pc" ? [-202, 0] : [0, -110],
+      duration: 700,
+    });
+  }
 
   useEffect(() => {
     const map = mapRef.current;
@@ -361,21 +383,7 @@ export default function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
-    map.setFilter("places-selected", [
-      "==",
-      ["get", "id"],
-      selectedId ?? "__none__",
-    ]);
-    if (!selectedId) return;
-    const p = places.find((x) => x.id === selectedId);
-    if (!p) return;
-    // 選んだ地点がパネル・シートの裏に隠れないよう、中心をずらす
-    map.flyTo({
-      center: [p.lng, p.lat],
-      zoom: Math.max(map.getZoom(), 11.5),
-      offset: variant === "pc" ? [-202, 0] : [0, -110],
-      duration: 700,
-    });
+    syncSelected(map);
   }, [selectedId, places, variant]);
 
   // 注意: MapLibreはこのdivに position:relative を強制するため、
@@ -383,7 +391,8 @@ export default function MapView({
   return (
     <div
       ref={containerRef}
-      className={`h-full w-full ${variant === "sp" ? "hig-map-sp" : ""}`}
+      className={`hig-map h-full w-full ${variant === "sp" ? "hig-map-sp" : ""}`}
+      style={{ "--hig-locate": C.locate } as React.CSSProperties}
     />
   );
 }

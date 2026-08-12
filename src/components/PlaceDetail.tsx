@@ -72,6 +72,10 @@ export default function PlaceDetail(props: Props) {
   } = props;
   const pc = variant === "pc";
   const d = distText(dist);
+  const todaySummary =
+    stats.todayReports.length > 0
+      ? `今日 ${stats.todayHeardCount} 件確認`
+      : "今日の報告はまだありません";
 
   const body = (
     <>
@@ -158,7 +162,7 @@ export default function PlaceDetail(props: Props) {
           color: C.muted,
         }}
       >
-        今日 {stats.todayHeardCount} 件確認 ・ 昨日 {stats.yesterdayHeardCount}{" "}
+        {todaySummary} ・ 昨日 {stats.yesterdayHeardCount}{" "}
         件 ・ 今シーズン計 {stats.seasonHeardCount} 件
       </p>
 
@@ -416,7 +420,7 @@ export default function PlaceDetail(props: Props) {
           style={{
             borderRadius: pc ? 13 : 14,
             background: C.answerBg,
-            border: "1px solid #a7f3d0",
+            border: `1px solid ${C.softAccent}`,
             padding: 16,
             animation: "higRise .28s ease-out",
           }}
@@ -493,8 +497,8 @@ export default function PlaceDetail(props: Props) {
         <div
           style={{
             borderRadius: pc ? 12 : 13,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
+            background: C.dangerBg,
+            border: `1px solid ${C.dangerBorder}`,
             padding: pc ? 14 : 15,
           }}
         >
@@ -505,7 +509,7 @@ export default function PlaceDetail(props: Props) {
             style={{
               margin: "6px 0 0",
               fontSize: 13,
-              color: "#b91c1c",
+              color: C.dangerText,
               lineHeight: 1.6,
             }}
           >

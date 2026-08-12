@@ -3,6 +3,14 @@
 import type { CSSProperties } from "react";
 import type { Freshness } from "./score";
 
+// 鮮度4段階の地図・一覧用の色。色はここにまとめる。
+export const FRESHNESS_COLOR: Record<Freshness, string> = {
+  today: "#059669",
+  recent3d: "#f59e0b",
+  season: "#ffffff",
+  none: "#94a3b8",
+};
+
 export const C = {
   // 濃い面
   headerBg: "#073024",
@@ -12,6 +20,7 @@ export const C = {
   onDarkSub: "#8fd3ba", // 濃い面の副文字。これより薄い色を濃緑の上に置かない
   railTick: "#a7f3d0",
   nowTone: "#6ee7b7", // 聞きどき中の状態文字
+  calmTone: "#d1fae5", // 聞きどき外の状態文字
 
   // 時間帯
   dawnBand: "#99f6e4",
@@ -36,6 +45,10 @@ export const C = {
   ink: "#0f172a",
   locate: "#0ea5e9",
   danger: "#991b1b",
+  dangerBg: "#fef2f2",
+  dangerBorder: "#fecaca",
+  dangerText: "#b91c1c",
+  softAccent: "#a7f3d0",
 
   // 面と罫
   white: "#ffffff",
@@ -43,15 +56,13 @@ export const C = {
   postBg: "#f7fbf9",
   hairline: "#f1f5f9",
   border: "#e6ebe9",
+  borderSoft: "#d8e0dd", // 白いボタン・ピルの枠
   border2: "#e2e8f0",
   border3: "#cbd5e1",
   muted: "#64748b", // 白の上の文字はこれが下限
   none: "#94a3b8", // 記録なしのピン。テキストには使わない
   mapBg: "#eef2f6",
 } as const;
-
-export const FONT_STACK =
-  '"Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif';
 
 // 鮮度ドット。一覧・カード・検索結果で共通に使う
 const DOT: Record<

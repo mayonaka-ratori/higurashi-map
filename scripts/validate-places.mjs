@@ -42,6 +42,11 @@ places.forEach((p, i) => {
     if (ids.has(p.id)) errors.push(`id "${p.id}" が重複している（${ids.get(p.id)}と${label}）`);
     else ids.set(p.id, label);
   }
+  for (const key of ["lat", "lng"]) {
+    if (p?.[key] !== undefined && (typeof p[key] !== "number" || !Number.isFinite(p[key]))) {
+      errors.push(`${label}: ${key} は数値である必要がある`);
+    }
+  }
   if (typeof p?.lat === "number" && (p.lat < LAT_MIN || p.lat > LAT_MAX)) {
     errors.push(`${label}: lat ${p.lat} が関東の範囲外（${LAT_MIN}〜${LAT_MAX}）。打ち間違いの疑い`);
   }
@@ -58,8 +63,21 @@ places.forEach((p, i) => {
           errors.push(`${label}: externalRecord.${key} がない`);
         }
       }
-      if (typeof r.date === "string" && !/^\d{4}-\d{2}-(\d{2}|XX)$/.test(r.date)) {
-        errors.push(`${label}: externalRecord.date "${r.date}" は YYYY-MM-DD か YYYY-MM-XX の形式にする`);
+      if (typeof r.date === "string") {
+        const match = /^(\d{4})-(\d{2})-(\d{2}|XX)$/.exec(r.date);
+        if (!match) {
+          errors.push(`${label}: externalRecord.date "${r.date}" は YYYY-MM-DD か YYYY-MM-XX の形式にする`);
+        } else {
+          const year = Number(match[1]);
+          const month = Number(match[2]);
+          const day = match[3] === "XX" ? null : Number(match[3]);
+          const lastDay = month >= 1 && month <= 12
+            ? new Date(Date.UTC(year, month, 0)).getUTCDate()
+            : 0;
+          if (month < 1 || month > 12 || (day !== null && (day < 1 || day > lastDay))) {
+            errors.push(`${label}: externalRecord.date "${r.date}" の月日が範囲外`);
+          }
+        }
       }
       if (typeof r.url === "string" && !/^https?:\/\//.test(r.url)) {
         errors.push(`${label}: externalRecord.url "${r.url}" がURLの形式でない`);
@@ -81,7 +99,12 @@ const distM = (a, b) => {
 for (let i = 0; i < places.length; i++) {
   for (let j = i + 1; j < places.length; j++) {
     const a = places[i], b = places[j];
-    if (typeof a?.lat !== "number" || typeof b?.lat !== "number") continue;
+    if (
+      typeof a?.lat !== "number" ||
+      typeof a?.lng !== "number" ||
+      typeof b?.lat !== "number" ||
+      typeof b?.lng !== "number"
+    ) continue;
     const d = distM(a, b);
     if (d < 200) {
       warnings.push(`「${a.name}」と「${b.name}」が${Math.round(d)}mしか離れていない。重複登録では？`);
