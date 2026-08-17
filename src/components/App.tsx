@@ -97,6 +97,9 @@ export default function App() {
   const [showComment, setShowComment] = useState(false);
   const [quick, setQuick] = useState<"now" | "later" | null>(null);
   const [laterAt, setLaterAt] = useState<LaterAt>("さっき");
+  // 現在地の取得を待っているあいだ。待っているのに「近い順」の顔で
+  // 遠い場所を出すと、急いでいる人が間違った場所へ投稿してしまう
+  const [locating, setLocating] = useState(false);
 
   const mapRef = useRef<MapHandle | null>(null);
   const reloadSeq = useRef(0);
@@ -321,8 +324,10 @@ export default function App() {
     async (mode: "now" | "later") => {
       setQuick(mode);
       if (!userPos) {
+        setLocating(true);
         const p = await getPosition();
         if (p) setUserPos({ lat: p.coords.latitude, lng: p.coords.longitude });
+        setLocating(false);
       }
     },
     [userPos]
@@ -405,6 +410,7 @@ export default function App() {
       mode={quick}
       near={nearest3}
       hasLocation={!!userPos}
+      locating={locating}
       laterAt={laterAt}
       onPickTime={setLaterAt}
       onPost={quickPost}

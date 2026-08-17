@@ -16,6 +16,9 @@ type Props = {
   near: Ranked[];
   // 現在地が取れているか。取れていないのに「近い順」と言わないため
   hasLocation: boolean;
+  // 現在地の取得を待っているあいだは true。
+  // このあいだに遠い場所の一覧を出すと、急いでいる人が間違った場所へ投稿する
+  locating: boolean;
   laterAt: LaterAt;
   onPickTime: (t: LaterAt) => void;
   onPost: (placeId: string) => void;
@@ -40,11 +43,57 @@ function chipStyle(on: boolean, pc: boolean): CSSProperties {
   };
 }
 
+// 候補行の外枠。待ち枠と寸法を必ず揃えるため、1か所にまとめてある
+function rowBox(pc: boolean): CSSProperties {
+  return {
+    display: "flex",
+    width: "100%",
+    alignItems: "center",
+    gap: 12,
+    padding: pc ? "13px 14px" : "15px 14px",
+    border: `1px solid ${C.borderSoft}`,
+    borderRadius: pc ? 12 : 13,
+    background: C.white,
+    textAlign: "left",
+    fontFamily: "inherit",
+  };
+}
+
+// 候補行の中の2行の行送り。既定の行送りは字体まかせで空枠と数値を合わせられないので、
+// ここで決めて候補行と待ち枠の両方から使う
+const NAME_LINE = 1.35;
+const SUB_LINE = 1.5;
+
+// 現在地を待つあいだに並べる空枠。中には文字を出さない。
+// 高さは固定pxではなく、候補行と同じ文字サイズ×行送りから出している。
+// 枠の数も3つで同じなので、現在地が取れて候補に入れ替わってもシートが跳ねない
+function WaitingRow({ pc }: { pc: boolean }) {
+  return (
+    <div aria-hidden style={rowBox(pc)}>
+      <span style={{ flex: "none", width: 16, height: 16 }} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span
+          style={{ display: "block", fontSize: 15, height: `${NAME_LINE}em` }}
+        />
+        <span
+          style={{
+            display: "block",
+            marginTop: 2,
+            fontSize: 12,
+            height: `${SUB_LINE}em`,
+          }}
+        />
+      </span>
+    </div>
+  );
+}
+
 export default function QuickPostSheet({
   variant,
   mode,
   near,
   hasLocation,
+  locating,
   laterAt,
   onPickTime,
   onPost,
@@ -53,6 +102,23 @@ export default function QuickPostSheet({
 }: Props) {
   const pc = variant === "pc";
   const isLater = mode === "later";
+
+  const lead = isLater
+    ? "いつの分かを選んでから、場所を押してください。昼間に聞いた分も、あとから入れられます。"
+    : locating
+      ? "現在地を確認しています…"
+      : hasLocation
+        ? "現在地から近い順に出しています。押すとその場で記録されます。"
+        : "現在地が取れないため、おすすめ順で出しています。押すとその場で記録されます。";
+
+  const listStyle: CSSProperties = {
+    margin: pc ? "13px 0 0" : "14px 0 0",
+    padding: 0,
+    listStyle: "none",
+    display: "flex",
+    flexDirection: "column",
+    gap: pc ? 8 : 9,
+  };
 
   return (
     <div
@@ -119,11 +185,7 @@ export default function QuickPostSheet({
             lineHeight: 1.65,
           }}
         >
-          {isLater
-            ? "いつの分かを選んでから、場所を押してください。昼間に聞いた分も、あとから入れられます。"
-            : hasLocation
-              ? "現在地から近い順に出しています。押すとその場で記録されます。"
-              : "押すとその場で記録されます。"}
+          {lead}
         </p>
 
         {isLater && (
@@ -149,71 +211,62 @@ export default function QuickPostSheet({
           </div>
         )}
 
-        <ul
-          style={{
-            margin: pc ? "13px 0 0" : "14px 0 0",
-            padding: 0,
-            listStyle: "none",
-            display: "flex",
-            flexDirection: "column",
-            gap: pc ? 8 : 9,
-          }}
-        >
-          {near.map((n) => (
-            <li key={n.p.id}>
-              <button
-                onClick={() => onPost(n.p.id)}
-                style={{
-                  display: "flex",
-                  width: "100%",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: pc ? "13px 14px" : "15px 14px",
-                  border: `1px solid ${C.borderSoft}`,
-                  borderRadius: pc ? 12 : 13,
-                  background: C.white,
-                  textAlign: "left",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <span style={dotStyle(n.s.freshness, 12)} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span
-                    style={{
-                      display: "block",
-                      fontSize: 15,
-                      fontWeight: 700,
-                      color: C.ink,
-                    }}
-                  >
-                    {n.p.name}
-                  </span>
-                  <span
-                    style={{
-                      display: "block",
-                      marginTop: 2,
-                      fontSize: 12,
-                      color: C.muted,
-                    }}
-                  >
-                    {placeLineText(n)}
-                  </span>
-                </span>
-                <span
-                  style={{
-                    flex: "none",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: C.greenHover,
-                  }}
+        {locating ? (
+          <ul style={listStyle}>
+            {[0, 1, 2].map((i) => (
+              <li key={i}>
+                <WaitingRow pc={pc} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <ul style={listStyle}>
+            {near.map((n) => (
+              <li key={n.p.id}>
+                <button
+                  onClick={() => onPost(n.p.id)}
+                  style={{ ...rowBox(pc), cursor: "pointer" }}
                 >
-                  {pc ? "記録する →" : "記録 →"}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <span style={dotStyle(n.s.freshness, 12)} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 15,
+                        lineHeight: NAME_LINE,
+                        fontWeight: 700,
+                        color: C.ink,
+                      }}
+                    >
+                      {n.p.name}
+                    </span>
+                    <span
+                      style={{
+                        display: "block",
+                        marginTop: 2,
+                        fontSize: 12,
+                        lineHeight: SUB_LINE,
+                        color: C.muted,
+                      }}
+                    >
+                      {placeLineText(n)}
+                    </span>
+                  </span>
+                  <span
+                    style={{
+                      flex: "none",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: C.greenHover,
+                    }}
+                  >
+                    {pc ? "記録する →" : "記録 →"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <button
           onClick={onPickOnMap}
