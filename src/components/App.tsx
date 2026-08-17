@@ -231,27 +231,42 @@ export default function App() {
   // 地図に名前が載っていない場所での「聞こえた」。約100mごとに1点へまとめる。
   // 鮮度はここで確定させる（地図には現在時刻を渡していない）
   const freeReports = useMemo<FreeReport[]>(() => {
-    const bySpot = new Map<string, FreeReport>();
+    const bySpot = new Map<
+      string,
+      { lat: number; lng: number; times: number[] }
+    >();
     for (const r of reports) {
       if (r.place_id || r.latitude == null || r.longitude == null || !r.heard) {
         continue;
       }
+      const at = Date.parse(r.created_at);
+      if (Number.isNaN(at)) continue;
       const lat = round3(r.latitude);
       const lng = round3(r.longitude);
       const key = `${lat},${lng}`;
-      const at = Date.parse(r.created_at);
       const cur = bySpot.get(key);
-      if (cur) {
-        cur.count += 1;
-        if (at > cur.latestAtMs) cur.latestAtMs = at;
-      } else {
-        bySpot.set(key, { lat, lng, count: 1, latestAtMs: at, freshness: "season" });
-      }
+      if (cur) cur.times.push(at);
+      else bySpot.set(key, { lat, lng, times: [at] });
     }
-    return [...bySpot.values()].map((f) => ({
-      ...f,
-      freshness: freshnessOf(new Date(f.latestAtMs), now),
-    }));
+    return [...bySpot.values()].map(({ lat, lng, times }) => {
+      const latestAtMs = Math.max(...times);
+      // 件数はいちばん新しい報告と同じ日の分だけ数える。
+      // 今シーズンの合計を出すと「今日◯件」が実際より多くなる
+      const last = new Date(latestAtMs);
+      const day0 = new Date(
+        last.getFullYear(),
+        last.getMonth(),
+        last.getDate()
+      ).getTime();
+      return {
+        lat,
+        lng,
+        count: times.filter((t) => t >= day0 && t < day0 + 24 * 60 * 60 * 1000)
+          .length,
+        latestAtMs,
+        freshness: freshnessOf(last, now),
+      };
+    });
   }, [reports, now]);
 
   // 現在地が無いあいだは「近い順」を名乗れないので、おすすめ順のまま出す

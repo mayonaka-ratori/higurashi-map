@@ -26,6 +26,8 @@ type Props = {
 
 // 吹き出しの最大幅。左右がはみ出さないよう、これの半分だけ内側に寄せる
 const TIP_MAX_W = 260;
+// PCの右パネルの幅。この下に吹き出しを出すと読めない
+const PANEL_W = 404;
 
 // 「今日 18:42 にこの辺りで聞こえました（2件）」。
 // 時刻まで言えるのは今日の分だけ。それ以外は日付だけにする
@@ -213,14 +215,15 @@ export default function MapOverlay({
   );
 
   // 吹き出しは点の上に出す。上に入りきらないときだけ下へ回し、
-  // 左右は地図の内側に収める
+  // 左右は読める範囲の内側に収める。PCは右パネルの下に入れない
   const tipAbove = freeTip ? freeTip.pt.y > 92 : true;
   const mapW = rootRef.current?.clientWidth ?? 0;
+  const tipRightLimit = pc ? mapW - PANEL_W : mapW;
   const tipLeft = freeTip
-    ? mapW > TIP_MAX_W + 24
+    ? tipRightLimit > TIP_MAX_W + 24
       ? Math.min(
           Math.max(freeTip.pt.x, TIP_MAX_W / 2 + 12),
-          mapW - TIP_MAX_W / 2 - 12
+          tipRightLimit - TIP_MAX_W / 2 - 12
         )
       : freeTip.pt.x
     : 0;

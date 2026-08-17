@@ -282,8 +282,8 @@ export default function MapView({
           ),
           "circle-stroke-width": byFreshness(1.5, 1.5, 1.25, 1.25),
           "circle-stroke-color": byFreshness(
-            "#ffffff",
-            "#ffffff",
+            C.white,
+            C.white,
             C.muted,
             C.muted
           ),
@@ -344,8 +344,8 @@ export default function MapView({
           "circle-opacity": byFreshness(1, 1, 1, 0.85),
           "circle-stroke-width": byFreshness(2.5, 2, 1.75, 1),
           "circle-stroke-color": byFreshness(
-            "#ffffff",
-            "#ffffff",
+            C.white,
+            C.white,
             C.muted,
             C.border2
           ),

@@ -30,6 +30,8 @@ export type PostState =
 export type FreeReport = {
   lat: number;
   lng: number;
+  // いちばん新しい報告と同じ日に、ここへ届いた件数。
+  // 今シーズンの合計にすると「今日◯件」と言えなくなる
   count: number;
   latestAtMs: number;
   freshness: Freshness;

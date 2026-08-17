@@ -87,11 +87,12 @@ const SUB_LINE = 1.5;
 
 // 現在地を待つあいだに並べる空枠。中には文字を出さない。
 // 高さは固定pxではなく、候補行と同じ文字サイズ×行送りから出している。
-// 枠の数も3つで同じなので、現在地が取れて候補に入れ替わってもシートが跳ねない
+// 枠の数も入れ替わったあとの行数と揃えてあるので、シートの高さが動かない
 function WaitingRow({ pc }: { pc: boolean }) {
   return (
     <div aria-hidden style={rowBox(pc)}>
-      <span style={{ flex: "none", width: 16, height: 16 }} />
+      {/* 鮮度ドットと同じ幅。ここがずれると候補に入れ替わった瞬間に文字が横へ動く */}
+      <span style={{ flex: "none", width: 12, height: 12 }} />
       <span style={{ flex: 1, minWidth: 0 }}>
         <span
           style={{ display: "block", fontSize: 15, height: `${NAME_LINE}em` }}
@@ -138,7 +139,9 @@ export default function QuickPostSheet({
       : "どの場所が静かでしたか";
 
   const lead = isLater
-    ? "いつの分かを選んでから、場所を押してください。昼間に聞いた分も、あとから入れられます。"
+    ? locating
+      ? "いつの分かを選んでから、場所を押してください。いま現在地を確認しています。"
+      : "いつの分かを選んでから、場所を押してください。昼間に聞いた分も、あとから入れられます。"
     : locating
       ? "現在地を確認しています…"
       : heard
@@ -148,6 +151,10 @@ export default function QuickPostSheet({
         : hasLocation
           ? "静かだったことも、次に探す人の役に立ちます。押すとその場で記録されます。"
           : "静かだったことも、次に探す人の役に立ちます。現在地が取れないため、おすすめ順で出しています。";
+
+  // 現在地が取れたあとに並ぶ行と同じ数だけ空枠を出す。
+  // 数がずれると、解決した瞬間に候補の位置が動いて押し間違える
+  const waitingRows = !isLater && heard ? 4 : 3;
 
   const listStyle: CSSProperties = {
     margin: pc ? "13px 0 0" : "14px 0 0",
@@ -357,7 +364,7 @@ export default function QuickPostSheet({
                 <div
                   style={{ fontSize: 14, fontWeight: 700, color: C.danger }}
                 >
-                  記録できませんでした
+                  送信できませんでした
                 </div>
                 <p
                   style={{
@@ -379,179 +386,180 @@ export default function QuickPostSheet({
           </div>
         ) : (
           <>
-        <p
-          style={{
-            margin: "5px 0 0",
-            fontSize: 12,
-            color: C.muted,
-            lineHeight: 1.65,
-          }}
-        >
-          {lead}
-        </p>
-
-        {!isLater && (
-          <div style={{ display: "flex", gap: 7, marginTop: 13 }}>
-            <button onClick={() => setHeard(true)} style={chipStyle(heard, pc)}>
-              🌲 聞こえた
-            </button>
-            <button onClick={() => setHeard(false)} style={chipStyle(!heard, pc)}>
-              🌙 静かだった
-            </button>
-          </div>
-        )}
-
-        {isLater && (
-          <div
+          <p
             style={{
-              display: "flex",
-              gap: 7,
-              marginTop: 13,
-              flexWrap: pc ? "wrap" : "nowrap",
-              overflowX: pc ? undefined : "auto",
-              overflowY: pc ? undefined : "hidden",
+              margin: "5px 0 0",
+              fontSize: 12,
+              color: C.muted,
+              lineHeight: 1.65,
             }}
           >
-            {LATER_TIMES.map((t) => (
-              <button
-                key={t}
-                onClick={() => onPickTime(t)}
-                style={chipStyle(laterAt === t, pc)}
-              >
-                {t}
+            {lead}
+          </p>
+
+          {!isLater && (
+            <div style={{ display: "flex", gap: 7, marginTop: 13 }}>
+              <button onClick={() => setHeard(true)} style={chipStyle(heard, pc)}>
+                🌲 聞こえた
               </button>
-            ))}
-          </div>
-        )}
+              <button onClick={() => setHeard(false)} style={chipStyle(!heard, pc)}>
+                🌙 静かだった
+              </button>
+            </div>
+          )}
 
-        {locating ? (
-          <ul style={listStyle}>
-            {[0, 1, 2].map((i) => (
-              <li key={i}>
-                <WaitingRow pc={pc} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <ul style={listStyle}>
-            {/* 名前のある場所を選ばずに、いまいる場所をそのまま記録する。
-                「静かだった」では出さない（名前の無い場所の静けさは印を付けようがない） */}
-            {!isLater && heard && (
-              <li>
+          {isLater && (
+            <div
+              style={{
+                display: "flex",
+                gap: 7,
+                marginTop: 13,
+                flexWrap: pc ? "wrap" : "nowrap",
+                overflowX: pc ? undefined : "auto",
+                overflowY: pc ? undefined : "hidden",
+              }}
+            >
+              {LATER_TIMES.map((t) => (
                 <button
-                  onClick={onPostFree}
-                  disabled={!hasLocation}
-                  style={{
-                    ...rowBox(pc),
-                    cursor: hasLocation ? "pointer" : "default",
-                    background: hasLocation ? C.white : C.panelAlt,
-                  }}
+                  key={t}
+                  onClick={() => onPickTime(t)}
+                  style={chipStyle(laterAt === t, pc)}
                 >
-                  <span
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {locating ? (
+            <ul style={listStyle}>
+              {Array.from({ length: waitingRows }, (_, i) => (
+                <li key={i}>
+                  <WaitingRow pc={pc} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul style={listStyle}>
+              {/* 名前のある場所を選ばずに、いまいる場所をそのまま記録する。
+                  「静かだった」では出さない（名前の無い場所の静けさは印を付けようがない） */}
+              {!isLater && heard && (
+                <li>
+                  <button
+                    onClick={onPostFree}
+                    disabled={!hasLocation}
                     style={{
-                      flex: "none",
-                      width: 16,
-                      fontSize: 14,
-                      lineHeight: 1,
-                      textAlign: "center",
-                      opacity: hasLocation ? 1 : 0.45,
+                      ...rowBox(pc),
+                      cursor: hasLocation ? "pointer" : "default",
+                      background: hasLocation ? C.white : C.panelAlt,
                     }}
                   >
-                    📍
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {/* 鮮度ドットと同じ幅にして、候補行と文字の頭を揃える */}
                     <span
                       style={{
-                        display: "block",
-                        fontSize: 15,
-                        lineHeight: NAME_LINE,
-                        fontWeight: 700,
-                        color: hasLocation ? C.ink : C.muted,
-                      }}
-                    >
-                      いまの場所で記録する
-                    </span>
-                    <span
-                      style={{
-                        display: "block",
-                        marginTop: 2,
+                        flex: "none",
+                        width: 12,
                         fontSize: 12,
-                        lineHeight: SUB_LINE,
-                        color: C.muted,
+                        lineHeight: 1,
+                        textAlign: "center",
+                        opacity: hasLocation ? 1 : 0.45,
                       }}
                     >
-                      {hasLocation
-                        ? "地図に名前が無い場所でも記録できます"
-                        : "現在地が取れないため使えません"}
+                      📍
                     </span>
-                  </span>
-                </button>
-              </li>
-            )}
-            {near.map((n) => (
-              <li key={n.p.id}>
-                <button
-                  onClick={() => onPost(n.p.id, heard)}
-                  style={{ ...rowBox(pc), cursor: "pointer" }}
-                >
-                  <span style={dotStyle(n.s.freshness, 12)} />
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: 15,
-                        lineHeight: NAME_LINE,
-                        fontWeight: 700,
-                        color: C.ink,
-                      }}
-                    >
-                      {n.p.name}
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: 15,
+                          lineHeight: NAME_LINE,
+                          fontWeight: 700,
+                          color: hasLocation ? C.ink : C.muted,
+                        }}
+                      >
+                        いまの場所で記録する
+                      </span>
+                      <span
+                        style={{
+                          display: "block",
+                          marginTop: 2,
+                          fontSize: 12,
+                          lineHeight: SUB_LINE,
+                          color: C.muted,
+                        }}
+                      >
+                        {hasLocation
+                          ? "地図に名前が無い場所でも記録できます"
+                          : "現在地が取れないため使えません"}
+                      </span>
                     </span>
-                    <span
-                      style={{
-                        display: "block",
-                        marginTop: 2,
-                        fontSize: 12,
-                        lineHeight: SUB_LINE,
-                        color: C.muted,
-                      }}
-                    >
-                      {placeLineText(n)}
-                    </span>
-                  </span>
-                  <span
-                    style={{
-                      flex: "none",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: C.greenHover,
-                    }}
+                  </button>
+                </li>
+              )}
+              {near.map((n) => (
+                <li key={n.p.id}>
+                  <button
+                    onClick={() => onPost(n.p.id, heard)}
+                    style={{ ...rowBox(pc), cursor: "pointer" }}
                   >
-                    {pc ? "記録する →" : "記録 →"}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                    <span style={dotStyle(n.s.freshness, 12)} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: 15,
+                          lineHeight: NAME_LINE,
+                          fontWeight: 700,
+                          color: C.ink,
+                        }}
+                      >
+                        {n.p.name}
+                      </span>
+                      <span
+                        style={{
+                          display: "block",
+                          marginTop: 2,
+                          fontSize: 12,
+                          lineHeight: SUB_LINE,
+                          color: C.muted,
+                        }}
+                      >
+                        {placeLineText(n)}
+                      </span>
+                    </span>
+                    <span
+                      style={{
+                        flex: "none",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: C.greenHover,
+                      }}
+                    >
+                      {pc ? "記録する →" : "記録 →"}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
-        <button
-          onClick={onPickOnMap}
-          style={{
-            marginTop: 12,
-            width: "100%",
-            padding: pc ? 12 : 14,
-            border: `1px dashed ${C.border3}`,
-            borderRadius: pc ? 12 : 13,
-            background: "none",
-            color: C.slateBtn,
-            fontSize: 13,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          この中にない — 地図から選ぶ
-        </button>
+          <button
+            onClick={onPickOnMap}
+            style={{
+              marginTop: 12,
+              width: "100%",
+              padding: pc ? 12 : 14,
+              border: `1px dashed ${C.border3}`,
+              borderRadius: pc ? 12 : 13,
+              background: "none",
+              color: C.slateBtn,
+              fontSize: 13,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            この中にない — 地図から選ぶ
+          </button>
           </>
         )}
       </div>
