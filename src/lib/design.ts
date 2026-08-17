@@ -48,6 +48,11 @@ export const C = {
   dangerBg: "#fef2f2",
   dangerBorder: "#fecaca",
   dangerText: "#b91c1c",
+  // 「あとで送ります」（電波が戻るまで端末に置いてある状態）。
+  // 失敗ではないので赤を使わない。役割の分け方は danger の3点と同じ
+  amberBg: "#fffbeb",
+  amberBorder: "#fde68a",
+  amberText: "#92400e",
   softAccent: "#a7f3d0",
 
   // 面と罫

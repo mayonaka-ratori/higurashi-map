@@ -15,6 +15,8 @@ export type PostState =
   | { kind: "idle" }
   | { kind: "sending"; heard: boolean }
   | { kind: "done"; heard: boolean }
+  // 電波が届かず、端末に置いてある状態。電波が戻りしだい自動で送る
+  | { kind: "queued"; heard: boolean }
   | { kind: "error"; heard: boolean; message: string };
 
 // 答えのブロックに出すもの。答えが立たない日は isEmpty が true になり、

@@ -6,10 +6,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import placesJson from "@/data/places.json";
-import type { Place, Report } from "@/lib/types";
+import type { NewReport, Place, Report } from "@/lib/types";
 import {
   demoMode,
+  enqueueReport,
   fetchReports,
+  flushQueue,
   insertReport,
   isThrottled,
   markPosted,
@@ -146,10 +148,20 @@ export default function App() {
     }
   }, []);
 
+  // 溜まっている投稿を送ってから、最新の状況を取り直す。
+  // 電波が戻った瞬間（online）にも同じことをする
   useEffect(() => {
-    reload();
-    const t = setInterval(reload, 60 * 1000); // 1分ごとに更新
-    return () => clearInterval(t);
+    const tick = async () => {
+      await flushQueue();
+      reload();
+    };
+    tick();
+    const t = setInterval(tick, 60 * 1000); // 1分ごとに更新
+    window.addEventListener("online", tick);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("online", tick);
+    };
   }, [reload]);
 
   const statsById = useMemo(() => {
@@ -294,28 +306,48 @@ export default function App() {
       setPostState({ kind: "sending", heard });
       const pos = await getPosition();
       const text = withComment && comment.trim() ? comment.trim().slice(0, 200) : null;
-      try {
-        await insertReport({
-          place_id: placeId,
-          heard,
-          latitude: pos?.coords.latitude ?? null,
-          longitude: pos?.coords.longitude ?? null,
-          accuracy: pos?.coords.accuracy ?? null,
-          comment: text,
-          created_at: at ? at.toISOString() : undefined,
-        });
-        markPosted(placeId);
-        setComment("");
-        setShowComment(false);
-        setPostState({ kind: "done", heard });
-        await reload();
-      } catch {
+      const payload: NewReport = {
+        place_id: placeId,
+        heard,
+        latitude: pos?.coords.latitude ?? null,
+        longitude: pos?.coords.longitude ?? null,
+        accuracy: pos?.coords.accuracy ?? null,
+        comment: text,
+        created_at: at ? at.toISOString() : undefined,
+      };
+      const fail = () =>
         setPostState({
           kind: "error",
           heard,
           message: "通信環境を確認して、もう一度お試しください。",
         });
+      // 端末に置いておいて、電波が戻ってから送る
+      const keepForLater = () => {
+        if (!enqueueReport(payload)) return false;
+        markPosted(placeId);
+        setComment("");
+        setShowComment(false);
+        setPostState({ kind: "queued", heard });
+        return true;
+      };
+
+      // お試しモードは通信を使わないので、ここでキューへ回してはいけない
+      //（流す仕組みが動かず、投稿が永久に消える）
+      if (!demoMode && navigator.onLine === false) {
+        if (!keepForLater()) fail();
+        return;
       }
+      const res = await insertReport(payload);
+      if (res.ok) {
+        markPosted(placeId);
+        setComment("");
+        setShowComment(false);
+        setPostState({ kind: "done", heard });
+        await reload();
+        return;
+      }
+      if (res.retryable && !demoMode && keepForLater()) return;
+      fail();
     },
     [comment, reload]
   );

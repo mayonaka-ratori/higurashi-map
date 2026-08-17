@@ -493,6 +493,58 @@ export default function PlaceDetail(props: Props) {
         </div>
       )}
 
+      {postState.kind === "queued" && (
+        <div
+          style={{
+            borderRadius: pc ? 13 : 14,
+            background: C.amberBg,
+            border: `1px solid ${C.amberBorder}`,
+            padding: 16,
+            animation: "higRise .28s ease-out",
+          }}
+        >
+          <div
+            style={{
+              fontSize: pc ? 15 : 16,
+              fontWeight: 700,
+              color: C.amberText,
+            }}
+          >
+            あとで送ります
+          </div>
+          <p
+            style={{
+              margin: "7px 0 0",
+              fontSize: 13,
+              color: C.amberText,
+              lineHeight: 1.65,
+            }}
+          >
+            いまは電波が届かないようです。この端末に保存したので、電波が戻りしだい自動で送ります。
+          </p>
+          {/* 自動で送るので「もう一度送る」は出さない。二重送信の入口を作らないため */}
+          <div style={{ marginTop: 13, display: "flex", gap: 10 }}>
+            <button
+              onClick={onCloseDone}
+              style={{
+                flex: 1,
+                borderRadius: pc ? 11 : 12,
+                background: C.white,
+                border: `1px solid ${C.border3}`,
+                color: C.slateBtnHover,
+                padding: pc ? "12px 8px" : "14px 8px",
+                fontSize: pc ? 13 : 14,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
+
       {postState.kind === "error" && (
         <div
           style={{
