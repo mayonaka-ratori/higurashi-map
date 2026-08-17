@@ -5,6 +5,10 @@ export const metadata: Metadata = {
   title: "ひぐらしのなくところに",
   description:
     "今日、カナカナが聞こえる場所。ヒグラシを聞きたい人のための匿名リアルタイム共有マップ。",
+  // ホーム画面に置いたときの名前・アイコン・起動のしかた
+  manifest: "/manifest.webmanifest",
+  icons: { apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "ひぐらし" },
 };
 
 export const viewport: Viewport = {
@@ -12,6 +16,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
+  // ヘッダーと同じ濃緑。metadata の themeColor はこのNextでは非推奨
+  themeColor: "#073024",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
