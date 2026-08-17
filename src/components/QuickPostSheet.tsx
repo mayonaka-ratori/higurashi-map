@@ -5,7 +5,7 @@
 // 「さっき聞いた分」は時刻を選んでから場所を押す。
 import { useState, type CSSProperties } from "react";
 import { C, dotStyle } from "@/lib/design";
-import { placeLineText, type Ranked } from "@/lib/view";
+import { placeLineText, type FreePostState, type Ranked } from "@/lib/view";
 
 export type LaterAt = "さっき" | "1時間前" | "今朝" | "昨日の夕方";
 export const LATER_TIMES: LaterAt[] = ["さっき", "1時間前", "今朝", "昨日の夕方"];
@@ -22,6 +22,11 @@ type Props = {
   laterAt: LaterAt;
   onPickTime: (t: LaterAt) => void;
   onPost: (placeId: string, heard: boolean) => void;
+  // 地図に名前が無い場所での記録。送信中と結果はこのシートの中だけに出す
+  freeState: FreePostState;
+  freeShareUrl: string;
+  onPostFree: () => void;
+  onBackFromFree: () => void;
   onPickOnMap: () => void;
   onClose: () => void;
 };
@@ -55,6 +60,22 @@ function rowBox(pc: boolean): CSSProperties {
     borderRadius: pc ? 12 : 13,
     background: C.white,
     textAlign: "left",
+    fontFamily: "inherit",
+  };
+}
+
+// 完了・保留・失敗の表示に置く控えめなボタン。地点詳細の完了カードと同じ寸法
+function quietBtn(pc: boolean): CSSProperties {
+  return {
+    flex: 1,
+    borderRadius: pc ? 11 : 12,
+    background: C.white,
+    border: `1px solid ${C.border3}`,
+    color: C.slateBtnHover,
+    padding: pc ? "12px 8px" : "14px 8px",
+    fontSize: pc ? 13 : 14,
+    fontWeight: 700,
+    cursor: "pointer",
     fontFamily: "inherit",
   };
 }
@@ -97,6 +118,10 @@ export default function QuickPostSheet({
   laterAt,
   onPickTime,
   onPost,
+  freeState,
+  freeShareUrl,
+  onPostFree,
+  onBackFromFree,
   onPickOnMap,
   onClose,
 }: Props) {
@@ -190,6 +215,170 @@ export default function QuickPostSheet({
             ✕
           </button>
         </div>
+
+        {freeState.kind !== "idle" ? (
+          <div style={{ marginTop: pc ? 13 : 14 }}>
+            {freeState.kind === "sending" && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 11,
+                  padding: pc ? "16px 4px" : "18px 4px",
+                }}
+              >
+                <span
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: 9999,
+                    background: C.green,
+                    animation: "higPulse 1.2s ease-out infinite",
+                  }}
+                />
+                <span
+                  style={{ fontSize: 14, fontWeight: 700, color: C.reason }}
+                >
+                  送信中…
+                </span>
+              </div>
+            )}
+
+            {freeState.kind === "done" && (
+              <div
+                style={{
+                  borderRadius: pc ? 13 : 14,
+                  background: C.answerBg,
+                  border: `1px solid ${C.softAccent}`,
+                  padding: 16,
+                  animation: "higRise .28s ease-out",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: pc ? 15 : 16,
+                    fontWeight: 700,
+                    color: C.reason,
+                  }}
+                >
+                  カナカナ情報を受け取りました。
+                </div>
+                <p
+                  style={{
+                    margin: "7px 0 0",
+                    fontSize: 13,
+                    color: C.greenHover,
+                    lineHeight: 1.65,
+                  }}
+                >
+                  今日ヒグラシを探している誰かの助けになります。
+                </p>
+                <p
+                  style={{
+                    margin: pc ? "9px 0 0" : "8px 0 0",
+                    fontSize: 12,
+                    color: C.greenHover,
+                  }}
+                >
+                  いまの場所に 🟢 が付きました。
+                </p>
+                <div style={{ marginTop: 13, display: "flex", gap: 10 }}>
+                  <a
+                    href={freeShareUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flex: 1,
+                      textAlign: "center",
+                      borderRadius: pc ? 11 : 12,
+                      background: C.ink,
+                      color: C.white,
+                      padding: pc ? "12px 8px" : "14px 8px",
+                      fontSize: pc ? 13 : 14,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    𝕏 でシェアする
+                  </a>
+                  <button onClick={onClose} style={quietBtn(pc)}>
+                    閉じる
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {freeState.kind === "queued" && (
+              <div
+                style={{
+                  borderRadius: pc ? 13 : 14,
+                  background: C.amberBg,
+                  border: `1px solid ${C.amberBorder}`,
+                  padding: 16,
+                  animation: "higRise .28s ease-out",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: pc ? 15 : 16,
+                    fontWeight: 700,
+                    color: C.amberText,
+                  }}
+                >
+                  あとで送ります
+                </div>
+                <p
+                  style={{
+                    margin: "7px 0 0",
+                    fontSize: 13,
+                    color: C.amberText,
+                    lineHeight: 1.65,
+                  }}
+                >
+                  いまは電波が届かないようです。この端末に保存したので、電波が戻りしだい自動で送ります。
+                </p>
+                <div style={{ marginTop: 13, display: "flex", gap: 10 }}>
+                  <button onClick={onClose} style={quietBtn(pc)}>
+                    閉じる
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {freeState.kind === "error" && (
+              <div
+                style={{
+                  borderRadius: pc ? 12 : 13,
+                  background: C.dangerBg,
+                  border: `1px solid ${C.dangerBorder}`,
+                  padding: pc ? 14 : 15,
+                }}
+              >
+                <div
+                  style={{ fontSize: 14, fontWeight: 700, color: C.danger }}
+                >
+                  記録できませんでした
+                </div>
+                <p
+                  style={{
+                    margin: "6px 0 0",
+                    fontSize: 13,
+                    color: C.dangerText,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {freeState.message}
+                </p>
+                <div style={{ marginTop: pc ? 11 : 12, display: "flex" }}>
+                  <button onClick={onBackFromFree} style={quietBtn(pc)}>
+                    もどる
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
         <p
           style={{
             margin: "5px 0 0",
@@ -245,6 +434,60 @@ export default function QuickPostSheet({
           </ul>
         ) : (
           <ul style={listStyle}>
+            {/* 名前のある場所を選ばずに、いまいる場所をそのまま記録する。
+                「静かだった」では出さない（名前の無い場所の静けさは印を付けようがない） */}
+            {!isLater && heard && (
+              <li>
+                <button
+                  onClick={onPostFree}
+                  disabled={!hasLocation}
+                  style={{
+                    ...rowBox(pc),
+                    cursor: hasLocation ? "pointer" : "default",
+                    background: hasLocation ? C.white : C.panelAlt,
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: "none",
+                      width: 16,
+                      fontSize: 14,
+                      lineHeight: 1,
+                      textAlign: "center",
+                      opacity: hasLocation ? 1 : 0.45,
+                    }}
+                  >
+                    📍
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 15,
+                        lineHeight: NAME_LINE,
+                        fontWeight: 700,
+                        color: hasLocation ? C.ink : C.muted,
+                      }}
+                    >
+                      いまの場所で記録する
+                    </span>
+                    <span
+                      style={{
+                        display: "block",
+                        marginTop: 2,
+                        fontSize: 12,
+                        lineHeight: SUB_LINE,
+                        color: C.muted,
+                      }}
+                    >
+                      {hasLocation
+                        ? "地図に名前が無い場所でも記録できます"
+                        : "現在地が取れないため使えません"}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            )}
             {near.map((n) => (
               <li key={n.p.id}>
                 <button
@@ -309,6 +552,8 @@ export default function QuickPostSheet({
         >
           この中にない — 地図から選ぶ
         </button>
+          </>
+        )}
       </div>
     </div>
   );

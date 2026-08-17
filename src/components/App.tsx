@@ -18,6 +18,7 @@ import {
 } from "@/lib/store";
 import {
   distanceKm,
+  freshnessOf,
   hm,
   placeStats,
   rankScore,
@@ -27,6 +28,8 @@ import { listeningWindows, type ListeningState } from "@/lib/sun";
 import { C } from "@/lib/design";
 import {
   buildAnswerVM,
+  type FreePostState,
+  type FreeReport,
   type PostState,
   type Ranked,
 } from "@/lib/view";
@@ -34,7 +37,7 @@ import DayRail from "./DayRail";
 import AnswerBlock from "./AnswerBlock";
 import PlaceDetail from "./PlaceDetail";
 import QuickPostSheet, { type LaterAt } from "./QuickPostSheet";
-import type { MapHandle } from "./MapView";
+import type { FreeTapInfo, MapHandle } from "./MapView";
 import MapOverlay from "./MapOverlay";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
@@ -58,6 +61,11 @@ function getPosition(): Promise<GeolocationPosition | null> {
   });
 }
 
+// 自由報告の座標のまとめ方。送信時と同じ小数3桁（約100m）で1点にする
+function round3(v: number): number {
+  return Math.round(v * 1000) / 1000;
+}
+
 // X（旧Twitter）の投稿画面を開くURLを作る
 function xShareUrl(place: Place, heard: boolean): string {
   const link = `${window.location.origin}/?place=${place.id}`;
@@ -65,6 +73,14 @@ function xShareUrl(place: Place, heard: boolean): string {
     ? `${place.name}でヒグラシの声を確認しました🌲\n#ひぐらしのなくところに`
     : `今日、カナカナが聞こえる場所。${place.name}の最新状況はこちら\n#ひぐらしのなくところに`;
   return `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`;
+}
+
+// 自由報告のシェア。場所の名前が無いので、地点名もリンク先の地点も入れない
+function xShareFreeUrl(): string {
+  const text = "ヒグラシの声を確認しました🌲\n#ひぐらしのなくところに";
+  return `https://x.com/intent/post?text=${encodeURIComponent(
+    text
+  )}&url=${encodeURIComponent(window.location.origin)}`;
 }
 
 // 「さっき聞いた分」の時刻。朝と夕は実際の夜明け・日の入りに合わせる
@@ -97,6 +113,14 @@ export default function App() {
   const [postState, setPostState] = useState<PostState>({ kind: "idle" });
   const [comment, setComment] = useState("");
   const [showComment, setShowComment] = useState(false);
+  // 地図に名前が載っていない場所への記録。地点詳細とは別に持つ
+  const [freePostState, setFreePostState] = useState<FreePostState>({
+    kind: "idle",
+  });
+  const [freeTip, setFreeTip] = useState<{
+    info: FreeTapInfo;
+    pt: { x: number; y: number };
+  } | null>(null);
   const [quick, setQuick] = useState<"now" | "later" | null>(null);
   const [laterAt, setLaterAt] = useState<LaterAt>("さっき");
   // 現在地の取得を待っているあいだ。待っているのに「近い順」の顔で
@@ -167,6 +191,8 @@ export default function App() {
   const statsById = useMemo(() => {
     const byPlace = new Map<string, Report[]>();
     for (const r of reports) {
+      // 自由報告はどのスポットの記録でもないので、期待度の計算に入れない
+      if (!r.place_id) continue;
       const list = byPlace.get(r.place_id);
       if (list) list.push(r);
       else byPlace.set(r.place_id, [r]);
@@ -200,6 +226,32 @@ export default function App() {
     return reports
       .filter((r) => Date.parse(r.created_at) >= today0)
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }, [reports, now]);
+
+  // 地図に名前が載っていない場所での「聞こえた」。約100mごとに1点へまとめる。
+  // 鮮度はここで確定させる（地図には現在時刻を渡していない）
+  const freeReports = useMemo<FreeReport[]>(() => {
+    const bySpot = new Map<string, FreeReport>();
+    for (const r of reports) {
+      if (r.place_id || r.latitude == null || r.longitude == null || !r.heard) {
+        continue;
+      }
+      const lat = round3(r.latitude);
+      const lng = round3(r.longitude);
+      const key = `${lat},${lng}`;
+      const at = Date.parse(r.created_at);
+      const cur = bySpot.get(key);
+      if (cur) {
+        cur.count += 1;
+        if (at > cur.latestAtMs) cur.latestAtMs = at;
+      } else {
+        bySpot.set(key, { lat, lng, count: 1, latestAtMs: at, freshness: "season" });
+      }
+    }
+    return [...bySpot.values()].map((f) => ({
+      ...f,
+      freshness: freshnessOf(new Date(f.latestAtMs), now),
+    }));
   }, [reports, now]);
 
   // 現在地が無いあいだは「近い順」を名乗れないので、おすすめ順のまま出す
@@ -252,6 +304,28 @@ export default function App() {
       }),
     [answer, now, restHasRecords, todayReports.length, userPos, win]
   );
+
+  // 近く（3km以内）で今日いくつ確認があったか。PCの脚注に一行足すためだけに使う
+  const nearFreeTodayCount = useMemo(() => {
+    if (!userPos) return 0;
+    return freeReports
+      .filter(
+        (f) =>
+          f.freshness === "today" &&
+          distanceKm(userPos.lat, userPos.lng, f.lat, f.lng) <= 3
+      )
+      .reduce((n, f) => n + f.count, 0);
+  }, [freeReports, userPos]);
+
+  // 近くに今日の確認があるなら、答えが立たない日の脚注をそれに差し替える。
+  // スマホの答えカードは高さが決まっていて行を足せないので、PCだけ
+  const shownVm = useMemo(() => {
+    if (!pc || !vm.isEmpty || nearFreeTodayCount === 0) return vm;
+    return {
+      ...vm,
+      footnote: `あなたの近く（3km以内）でも、今日${nearFreeTodayCount}件の確認があります。聞こえなかったときも「静かだった」を押すと、次の人の役に立ちます。`,
+    };
+  }, [pc, vm, nearFreeTodayCount]);
 
   const normalize = (s: string) => s.normalize("NFKC").toLowerCase();
   const searchResults = useMemo(() => {
@@ -352,8 +426,65 @@ export default function App() {
     [comment, reload]
   );
 
+  // 現在地で記録する。名前のある場所を選ばない分、地点詳細には何も出さない
+  const postFreeReport = useCallback(async () => {
+    if (isThrottled("free")) {
+      setFreePostState({
+        kind: "error",
+        message: "続けての記録は2分あけてください。",
+      });
+      return;
+    }
+    setFreePostState({ kind: "sending" });
+    const pos = await getPosition();
+    if (!pos) {
+      // 座標が無いと地図に出しようがないので、送る前に止める
+      setFreePostState({
+        kind: "error",
+        message:
+          "現在地が取れないため、いまの場所では記録できません。近くの場所から選んでください。",
+      });
+      return;
+    }
+    // 座標の丸めは store.ts の insertReport がまとめて行う
+    const payload: NewReport = {
+      place_id: null,
+      heard: true,
+      latitude: pos.coords.latitude,
+      longitude: pos.coords.longitude,
+      accuracy: pos.coords.accuracy ?? null,
+      comment: null,
+    };
+    const fail = () =>
+      setFreePostState({
+        kind: "error",
+        message: "通信環境を確認して、もう一度お試しください。",
+      });
+    const keepForLater = () => {
+      if (!enqueueReport(payload)) return false;
+      markPosted("free");
+      setFreePostState({ kind: "queued" });
+      return true;
+    };
+
+    if (!demoMode && navigator.onLine === false) {
+      if (!keepForLater()) fail();
+      return;
+    }
+    const res = await insertReport(payload);
+    if (res.ok) {
+      markPosted("free");
+      setFreePostState({ kind: "done" });
+      await reload();
+      return;
+    }
+    if (res.retryable && !demoMode && keepForLater()) return;
+    fail();
+  }, [reload]);
+
   const openQuick = useCallback(
     async (mode: "now" | "later") => {
+      setFreePostState({ kind: "idle" });
       setQuick(mode);
       if (!userPos) {
         setLocating(true);
@@ -393,7 +524,7 @@ export default function App() {
   const answerBlock = win ? (
     <AnswerBlock
       variant={variant}
-      vm={vm}
+      vm={shownVm}
       rest={restPool}
       now={now}
       sort={effSort}
@@ -446,11 +577,18 @@ export default function App() {
       laterAt={laterAt}
       onPickTime={setLaterAt}
       onPost={quickPost}
+      freeState={freePostState}
+      freeShareUrl={xShareFreeUrl()}
+      onPostFree={postFreeReport}
+      onBackFromFree={() => setFreePostState({ kind: "idle" })}
       onPickOnMap={() => {
         setQuick(null);
         setSelectedId(null);
       }}
-      onClose={() => setQuick(null)}
+      onClose={() => {
+        setQuick(null);
+        setFreePostState({ kind: "idle" });
+      }}
     />
   ) : null;
 
@@ -515,10 +653,13 @@ export default function App() {
           ref={mapRef}
           places={places}
           statsById={statsById}
+          freeReports={freeReports}
           selectedId={selectedId}
           hoverId={hoverId}
           variant={variant}
           onSelect={selectPlace}
+          onFreeTap={(info, pt) => setFreeTip({ info, pt })}
+          onFreeTapClear={() => setFreeTip(null)}
           onHover={(id, pt) => {
             setHoverId(id);
             setHoverPt(pt);
@@ -540,6 +681,7 @@ export default function App() {
         hoverPlace={hoverPlace}
         hoverStats={hoverStats}
         hoverPt={hoverPt}
+        freeTip={freeTip}
       />
 
       {/* PCの右パネル。地図は全幅のまま、上に重ねる */}

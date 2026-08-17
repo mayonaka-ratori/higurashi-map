@@ -4,7 +4,8 @@ import { useEffect, useImperativeHandle, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Place } from "@/lib/types";
-import type { PlaceStats } from "@/lib/score";
+import type { Freshness, PlaceStats } from "@/lib/score";
+import type { FreeReport } from "@/lib/view";
 import { C, FRESHNESS_COLOR, shortName } from "@/lib/design";
 
 export type MapHandle = {
@@ -12,13 +13,25 @@ export type MapHandle = {
   locate: () => void;
 };
 
+// 自由報告の点を押したときに吹き出しへ渡すもの。
+// 地図の中では日付を扱えないので、時刻はミリ秒の数値のまま渡す
+export type FreeTapInfo = {
+  freshness: Freshness;
+  count: number;
+  latestAtMs: number;
+};
+
 type Props = {
   places: Place[];
   statsById: Record<string, PlaceStats>;
+  // 地図に名前が載っていない場所での「聞こえた」。App.tsx でまとめ済み
+  freeReports: FreeReport[];
   selectedId: string | null;
   hoverId: string | null;
   variant: "pc" | "sp";
   onSelect: (id: string | null) => void;
+  onFreeTap: (info: FreeTapInfo, point: { x: number; y: number }) => void;
+  onFreeTapClear: () => void;
   onHover: (id: string | null, point: { x: number; y: number } | null) => void;
   onUserLocate: (lat: number, lng: number) => void;
   onLocateStart: () => void;
@@ -42,6 +55,23 @@ function toGeoJson(
         freshness: statsById[p.id]?.freshness ?? "none",
         score: statsById[p.id]?.score ?? 0,
         label: shortName(p.name),
+      },
+    })),
+  };
+}
+
+// 自由報告の点。MapLibreはこの中身をワーカーへ渡すので、
+// 数値・文字列・真偽値だけを入れる（Dateを入れると地図の式から読めない）
+function freeToGeoJson(list: FreeReport[]): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: list.map((f) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [f.lng, f.lat] },
+      properties: {
+        freshness: f.freshness,
+        count: f.count,
+        latestAtMs: f.latestAtMs,
       },
     })),
   };
@@ -72,10 +102,13 @@ const TODAY_ONLY = ["==", ["get", "freshness"], "today"] as unknown as maplibreg
 export default function MapView({
   places,
   statsById,
+  freeReports,
   selectedId,
   hoverId,
   variant,
   onSelect,
+  onFreeTap,
+  onFreeTapClear,
   onHover,
   onUserLocate,
   onLocateStart,
@@ -89,10 +122,24 @@ export default function MapView({
   const pulsesRef = useRef<Map<string, maplibregl.Marker>>(new Map());
 
   // イベントハンドラから常に最新のコールバックとデータを見るための参照
-  const cb = useRef({ onSelect, onHover, onUserLocate, onLocateStart });
-  cb.current = { onSelect, onHover, onUserLocate, onLocateStart };
-  const dataRef = useRef({ places, statsById, variant, selectedId });
-  dataRef.current = { places, statsById, variant, selectedId };
+  const cb = useRef({
+    onSelect,
+    onFreeTap,
+    onFreeTapClear,
+    onHover,
+    onUserLocate,
+    onLocateStart,
+  });
+  cb.current = {
+    onSelect,
+    onFreeTap,
+    onFreeTapClear,
+    onHover,
+    onUserLocate,
+    onLocateStart,
+  };
+  const dataRef = useRef({ places, statsById, freeReports, variant, selectedId });
+  dataRef.current = { places, statsById, freeReports, variant, selectedId };
 
   // 親（スマホの◎ボタン）から現在地取得を呼べるようにする
   useImperativeHandle(
@@ -204,6 +251,44 @@ export default function MapView({
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
+      map.addSource("free-reports", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+
+      // 名前の無い場所の記録。登録スポットのピンより先に足して下に敷く。
+      // 一段小さくし、ラベルも波紋もリングも付けない
+      map.addLayer({
+        id: "free-circle",
+        type: "circle",
+        source: "free-reports",
+        layout: {
+          "circle-sort-key": byFreshness(3, 2, 1, 0),
+        },
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            8, byFreshness(4.5, 3.5, 2.5, 2.5),
+            11, byFreshness(6.5, 5, 3.5, 3.5),
+            14, byFreshness(9, 7, 5, 5),
+          ],
+          "circle-color": byFreshness(
+            FRESHNESS_COLOR.today,
+            FRESHNESS_COLOR.recent3d,
+            FRESHNESS_COLOR.season,
+            FRESHNESS_COLOR.season
+          ),
+          "circle-stroke-width": byFreshness(1.5, 1.5, 1.25, 1.25),
+          "circle-stroke-color": byFreshness(
+            "#ffffff",
+            "#ffffff",
+            C.muted,
+            C.muted
+          ),
+        },
+      });
 
       // hover / 選択のリング。ピンより先に足して下に敷く
       map.addLayer({
@@ -300,15 +385,40 @@ export default function MapView({
       // 指でも押しやすいよう、タップ位置の周囲10pxまでをピンの判定にする
       map.on("click", (e) => {
         const pad = 10;
-        const fs = map.queryRenderedFeatures(
-          [
-            [e.point.x - pad, e.point.y - pad],
-            [e.point.x + pad, e.point.y + pad],
-          ],
-          { layers: ["places-circle"] }
-        );
-        cb.current.onSelect(fs.length > 0 ? String(fs[0].properties?.id) : null);
+        const box: [maplibregl.PointLike, maplibregl.PointLike] = [
+          [e.point.x - pad, e.point.y - pad],
+          [e.point.x + pad, e.point.y + pad],
+        ];
+        const fs = map.queryRenderedFeatures(box, {
+          layers: ["places-circle"],
+        });
+        if (fs.length > 0) {
+          cb.current.onFreeTapClear();
+          cb.current.onSelect(String(fs[0].properties?.id));
+          return;
+        }
+        // 登録スポットに当たらなかったときだけ、名前の無い場所の点を調べる
+        const free = map.queryRenderedFeatures(box, {
+          layers: ["free-circle"],
+        });
+        if (free.length > 0) {
+          const p = free[0].properties ?? {};
+          cb.current.onFreeTap(
+            {
+              freshness: String(p.freshness) as Freshness,
+              count: Number(p.count),
+              latestAtMs: Number(p.latestAtMs),
+            },
+            { x: e.point.x, y: e.point.y }
+          );
+          // ここで onSelect(null) を呼ぶと、吹き出しを出した瞬間に選択が外れる
+          return;
+        }
+        cb.current.onFreeTapClear();
+        cb.current.onSelect(null);
       });
+      // 地図が動いたら吹き出しは消す（点の上に貼り付いていないため）
+      map.on("move", () => cb.current.onFreeTapClear());
       map.on("mousemove", "places-circle", (e) => {
         map.getCanvas().style.cursor = "pointer";
         const f = e.features?.[0];
@@ -328,6 +438,11 @@ export default function MapView({
       readyRef.current = true;
       (map.getSource("places") as maplibregl.GeoJSONSource).setData(
         toGeoJson(dataRef.current.places, dataRef.current.statsById)
+      );
+      // 地図はPC⇔スマホの幅切り替えで作り直されるので、ここでも入れ直す。
+      // 落とすと、幅をまたいだ瞬間に名前の無い場所の点だけ消える
+      (map.getSource("free-reports") as maplibregl.GeoJSONSource).setData(
+        freeToGeoJson(dataRef.current.freeReports)
       );
       syncPulses(map);
       applyLabelInset(map);
@@ -369,6 +484,14 @@ export default function MapView({
     syncPulses(map);
     applyLabelInset(map);
   }, [places, statsById]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    (map.getSource("free-reports") as maplibregl.GeoJSONSource).setData(
+      freeToGeoJson(freeReports)
+    );
+  }, [freeReports]);
 
   useEffect(() => {
     const map = mapRef.current;

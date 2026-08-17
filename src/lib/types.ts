@@ -17,7 +17,9 @@ export type Place = {
 
 export type Report = {
   id: string;
-  place_id: string;
+  // 地図に名前が載っていない場所での記録（自由報告）は null。
+  // そのときは latitude / longitude が必ず入っている
+  place_id: string | null;
   heard: boolean;
   latitude: number | null;
   longitude: number | null;
@@ -27,7 +29,7 @@ export type Report = {
 };
 
 export type NewReport = {
-  place_id: string;
+  place_id: string | null;
   heard: boolean;
   latitude: number | null;
   longitude: number | null;

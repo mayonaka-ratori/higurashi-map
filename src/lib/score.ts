@@ -68,6 +68,16 @@ function parseExternal(
   return { kind: "exact", daysAgo };
 }
 
+// 最後に聞こえた時刻から鮮度を出す。暦日で切るので、0時を回ると「今日」から外れる。
+// 登録スポットのピンと自由報告のピンで境目がずれないよう、どちらもこれを使う
+export function freshnessOf(lastHeardAt: Date, now: Date): Freshness {
+  const today0 = startOfDay(now).getTime();
+  const t = lastHeardAt.getTime();
+  if (t >= today0) return "today";
+  if (t >= today0 - 3 * DAY) return "recent3d";
+  return "season";
+}
+
 const FRESHNESS_RANK: Record<Freshness, number> = {
   none: 0,
   season: 1,
@@ -148,12 +158,7 @@ export function placeStats(
     score >= 55 ? 5 : score >= 35 ? 4 : score >= 20 ? 3 : score >= 10 ? 2 : score > 0 ? 1 : 0;
 
   let freshness: Freshness = "none";
-  if (lastHeardAt) {
-    const t = lastHeardAt.getTime();
-    if (t >= today0) freshness = "today";
-    else if (t >= today0 - 3 * DAY) freshness = "recent3d";
-    else freshness = "season";
-  }
+  if (lastHeardAt) freshness = freshnessOf(lastHeardAt, now);
   if (FRESHNESS_RANK[extFreshness] > FRESHNESS_RANK[freshness]) {
     freshness = extFreshness;
   }

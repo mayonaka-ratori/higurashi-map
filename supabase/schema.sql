@@ -8,15 +8,19 @@
 -- 稼働中のDBを追いつかせるときは supabase/migrations/ の中を順に流すこと。
 
 -- 投稿テーブル（スポット一覧はアプリ内のJSONで管理するので、テーブルはこれ1つだけ）
+-- place_id が空の行は「自由報告」。地図に名前が載っていない場所での記録で、
+-- 位置は緯度経度で持つ。どちらも無い行は受け付けない。
 create table public.reports (
   id uuid primary key default gen_random_uuid(),
-  place_id text not null,
+  place_id text,
   heard boolean not null,
   latitude double precision,
   longitude double precision,
   accuracy double precision,
   comment text check (char_length(comment) <= 200),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint reports_location_required
+    check (place_id is not null or (latitude is not null and longitude is not null))
 );
 
 create index reports_place_created on public.reports (place_id, created_at desc);

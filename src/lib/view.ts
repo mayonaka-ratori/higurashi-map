@@ -1,7 +1,13 @@
 // 画面のあいだで受け渡す形。計算は App.tsx の1か所でやり、
 // 表示する部品には出来上がった文字列だけ渡す（見出しと中身が食い違わないように）。
 import type { Place } from "./types";
-import { notesLabel, notesText, reasonText, type PlaceStats } from "./score";
+import {
+  notesLabel,
+  notesText,
+  reasonText,
+  type Freshness,
+  type PlaceStats,
+} from "./score";
 import type { ListeningState } from "./sun";
 
 export type Ranked = {
@@ -18,6 +24,25 @@ export type PostState =
   // 電波が届かず、端末に置いてある状態。電波が戻りしだい自動で送る
   | { kind: "queued"; heard: boolean }
   | { kind: "error"; heard: boolean; message: string };
+
+// 地図に名前が載っていない場所での「聞こえた」を、丸めた座標ごとにまとめたもの。
+// 地図に渡す前に App.tsx で作る。鮮度もそこで確定させる（地図側には現在時刻が無い）
+export type FreeReport = {
+  lat: number;
+  lng: number;
+  count: number;
+  latestAtMs: number;
+  freshness: Freshness;
+};
+
+// 自由報告の送信状態。地点詳細の PostState とは別に持つ。
+// 一緒にすると、共有リンクで開いていた地点の詳細に完了カードが出てしまう
+export type FreePostState =
+  | { kind: "idle" }
+  | { kind: "sending" }
+  | { kind: "done" }
+  | { kind: "queued" }
+  | { kind: "error"; message: string };
 
 // 答えのブロックに出すもの。答えが立たない日は isEmpty が true になり、
 // 見出しも本文もボタンも別のものに入れ替わる

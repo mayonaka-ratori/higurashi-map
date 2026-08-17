@@ -1,10 +1,12 @@
 "use client";
 
+import { useRef } from "react";
 import type { Place } from "@/lib/types";
 import type { PlaceStats, Freshness } from "@/lib/score";
-import { notesText, reasonText } from "@/lib/score";
+import { hm, notesText, reasonText } from "@/lib/score";
 import { C, dotStyle, notesStyle } from "@/lib/design";
 import { placeLineText, type Ranked } from "@/lib/view";
+import type { FreeTapInfo } from "./MapView";
 
 type Props = {
   variant: "pc" | "sp";
@@ -18,7 +20,24 @@ type Props = {
   hoverPlace: Place | null;
   hoverStats: PlaceStats | null;
   hoverPt: { x: number; y: number } | null;
+  // 名前の無い場所の点を押したときの吹き出し。地図を動かすと消える
+  freeTip: { info: FreeTapInfo; pt: { x: number; y: number } } | null;
 };
+
+// 吹き出しの最大幅。左右がはみ出さないよう、これの半分だけ内側に寄せる
+const TIP_MAX_W = 260;
+
+// 「今日 18:42 にこの辺りで聞こえました（2件）」。
+// 時刻まで言えるのは今日の分だけ。それ以外は日付だけにする
+function freeTipText(info: FreeTapInfo): string {
+  const at = new Date(info.latestAtMs);
+  const when =
+    info.freshness === "today"
+      ? `今日 ${hm(at)} に`
+      : `${at.getMonth() + 1}/${at.getDate()} に`;
+  const many = info.count >= 2 ? `（${info.count}件）` : "";
+  return `${when}この辺りで聞こえました${many}`;
+}
 
 const legendItems: Array<[Freshness, string, string]> = [
   ["today", "今日", C.ink],
@@ -39,8 +58,10 @@ export default function MapOverlay({
   hoverPlace,
   hoverStats,
   hoverPt,
+  freeTip,
 }: Props) {
   const pc = variant === "pc";
+  const rootRef = useRef<HTMLDivElement>(null);
   const searchBox = (
     <div
       style={{
@@ -191,8 +212,22 @@ export default function MapOverlay({
     </div>
   );
 
+  // 吹き出しは点の上に出す。上に入りきらないときだけ下へ回し、
+  // 左右は地図の内側に収める
+  const tipAbove = freeTip ? freeTip.pt.y > 92 : true;
+  const mapW = rootRef.current?.clientWidth ?? 0;
+  const tipLeft = freeTip
+    ? mapW > TIP_MAX_W + 24
+      ? Math.min(
+          Math.max(freeTip.pt.x, TIP_MAX_W / 2 + 12),
+          mapW - TIP_MAX_W / 2 - 12
+        )
+      : freeTip.pt.x
+    : 0;
+
   return (
     <div
+      ref={rootRef}
       style={{
         position: "absolute",
         inset: 0,
@@ -285,6 +320,34 @@ export default function MapOverlay({
               {reasonText(hoverStats, now)}
             </span>
             <span style={notesStyle(12)}>{notesText(hoverStats.stars)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 名前の無い場所の点の吹き出し。スマホのタップが主戦場なので pc で閉じない */}
+      {freeTip && (
+        <div
+          style={{
+            position: "absolute",
+            left: tipLeft,
+            top: tipAbove ? freeTip.pt.y - 16 : freeTip.pt.y + 16,
+            transform: tipAbove ? "translate(-50%,-100%)" : "translate(-50%,0)",
+            maxWidth: TIP_MAX_W,
+            background: C.white,
+            border: `1px solid ${C.border2}`,
+            borderRadius: 10,
+            padding: "9px 13px",
+            boxShadow: "0 6px 20px rgba(15,23,42,.2)",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{ display: "flex", alignItems: "center", gap: 8 }}
+          >
+            <span style={dotStyle(freeTip.info.freshness, 10)} />
+            <span style={{ fontSize: 13, color: C.slateBtn, lineHeight: 1.5 }}>
+              {freeTipText(freeTip.info)}
+            </span>
           </div>
         </div>
       )}
