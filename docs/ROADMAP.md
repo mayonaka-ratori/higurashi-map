@@ -34,8 +34,13 @@
       SQL Editor で [supabase/migrations/2026-08-09-created-at-from-app.sql](../supabase/migrations/2026-08-09-created-at-from-app.sql)
       を流すこと（`schema.sql` を丸ごと流すとテーブル作成でぶつかる）
 
-- [ ] **UI/UX改修（2026-08-18計画）** — 投稿の摩擦を減らす4つの小改修と、
-      未登録の場所へ投稿できる「自由報告ピン」。詳細は [UIUX-PLAN-2026-08.md](UIUX-PLAN-2026-08.md)
+- [x] **UI/UX改修（2026-08-18計画）** — 2026-08-18実装。現在地待ちの見せ方、クイック投稿からの
+      「静かだった」、圏外での送信キュー、ホーム画面設置（PWA）、未登録の場所への「自由報告ピン」。
+      計画書は [UIUX-PLAN-2026-08.md](UIUX-PLAN-2026-08.md)（フェーズ2は未着手のまま残してある）
+- [ ] 自由報告ピンを本番で動かすには、place_id を空にできるようにする必要がある。
+      SQL Editor で [supabase/migrations/2026-08-19-free-reports.sql](../supabase/migrations/2026-08-19-free-reports.sql)
+      を流すこと。**マイグレーション → デプロイの順**。未適用のままデプロイすると、
+      自由報告だけがサーバーに断られて送信失敗のカードが出る
 - [ ] 実地でスポット座標を修正。机上の検算は2026-08-08に一巡した
       （OpenStreetMapと突き合わせて141箇所を修正。`node scripts/check-coords.mjs`）。
       渓谷・尾根道などOSMで照合できなかったものは概算のまま残っている
