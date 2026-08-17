@@ -12,7 +12,8 @@
 - [docs/SPEC.md](docs/SPEC.md) — 実装済み仕様（期待度の計算式・データモデル）
 - [docs/ROADMAP.md](docs/ROADMAP.md) — 今後の計画
 - [docs/DESIGN.md](docs/DESIGN.md) — UI再設計ブリーフ（PC対応。依頼側の記録）
-- [docs/design-handoff/](docs/design-handoff/) — 上のブリーフへの回答。確定した地図UIの仕様と参照実装（未実装）
+- [docs/design-handoff-v2/](docs/design-handoff-v2/) — 確定した地図UIの仕様と参照実装（案4「今夜の答え」。2026-08-09に実装済み）
+- [docs/design-handoff/](docs/design-handoff/) — 実装前に落とした案Bの記録。地図の仕様（鮮度4段階・ピン半径・リング）だけは現行
 - [AGENTS.md](AGENTS.md) — 開発の決まり（AIアシスタント向け。人が読んでも有用）
 
 ## 構成
@@ -34,13 +35,14 @@ npm run dev
 
 → http://localhost:3000 （接続情報が無ければお試しモードで動く）
 
-デザインの参照実装（[docs/design-handoff/](docs/design-handoff/)）を見るには:
+デザインの参照実装（[docs/design-handoff-v2/](docs/design-handoff-v2/)）を見るには:
 
 ```
 npm run design
 ```
 
-→ http://localhost:4321/再設計案.dc.html
+→ PC版 http://localhost:4321/plan4-answer.dc.html / スマホ版 http://localhost:4321/plan4-answer-sp.dc.html
+（React と Leaflet を CDN から読むため、インターネット接続が要る）
 
 ## 公開手順
 
@@ -91,8 +93,11 @@ node scripts/check-coords.mjs takao mitake  # 指定したidだけ
 - 3時間以内に2件以上 +20（複数人確認）
 - 直近の投稿がGPS高精度（50m以内） +10
 - 3時間以内の「静かだった」 1件につき -5（最大-15）
+- 外部サイトの記録（運営が調べたもの）が3日以内 +10 / 今シーズン内 +5
 
-合計を ★0〜5 に変換して表示する。
+合計を ♪0〜5 に変換して表示する。外部記録だけでは ♪2 が上限で、
+♪3以上はアプリへのリアルタイム投稿でしか付かない。
+詳しい変換の値は [docs/SPEC.md](docs/SPEC.md) を参照。
 
 ## ピンの色
 

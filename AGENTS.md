@@ -15,7 +15,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ヒグラシを聞きたい人のための匿名リアルタイム共有マップ。
 詳細は [docs/VISION.md](docs/VISION.md)（理念）、[docs/SPEC.md](docs/SPEC.md)（実装済み仕様）、
 [docs/ROADMAP.md](docs/ROADMAP.md)（今後の計画）、[docs/DESIGN.md](docs/DESIGN.md)（UI再設計ブリーフ）、
-[docs/design-handoff/](docs/design-handoff/)（確定した地図UIの仕様。未実装）を見ること。
+[docs/design-handoff-v2/](docs/design-handoff-v2/)（確定した地図UIの仕様。実装済み）を見ること。
 
 ## 唯一の判断基準
 
@@ -64,6 +64,11 @@ Leafletのコードを持ち込まないこと（理由と対応表はハンド�
 
 画面のどこにも **★ を出さない**。期待度は ♪ で表す（`notesText`）。
 文字は **11px を下回らない**。夕暮れに屋外で読む画面だから。
+この2つとLeafletの持ち込みは、src 配下の編集時にフックが機械チェックする
+（`.claude/settings.json` → `scripts/ui-guard-hook.mjs`）。
+
+画面にまとまった変更を入れたら、コミット前に `design-reviewer` エージェントに
+確定仕様との突き合わせレビューを依頼する。
 
 ## 落とし穴（過去に実際に踏んだもの。壊さないこと）
 
@@ -93,6 +98,7 @@ Leafletのコードを持ち込まないこと（理由と対応表はハンド�
   手動実行は `npm run validate:places`
 - まとまった追加・座標の妥当性レビューは `spot-reviewer` エージェントに依頼する
 - 対話でスポットを足すときは `/add-spot` スキルを使う
+- 外部サイトのヒグラシ記録（`externalRecord`）を足すときは `/add-external-record` スキルを使う
 
 ## アプリ内テキストの流儀
 
@@ -106,4 +112,5 @@ Leafletのコードを持ち込まないこと（理由と対応表はハンド�
 
 - 動作確認した内容と、確認できていない内容を分けて報告する
 - 特に地図まわりは「ブラウザで実際に見えるか」まで確認しないと完了扱いにしない
-  （画面部品の存在チェックだけでは、高さ0やワーカー死亡のような不具合を見逃した実績がある）
+  （画面部品の存在チェックだけでは、高さ0やワーカー死亡のような不具合を見逃した実績がある）。
+  確認の手順は `/verify-map` スキルにまとめてある

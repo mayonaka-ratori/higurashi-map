@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "node scripts/places-hook.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node scripts/ui-guard-hook.mjs"
           }
         ]
       }
