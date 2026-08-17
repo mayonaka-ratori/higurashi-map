@@ -3,7 +3,7 @@
 // 地点を先に選ばせずに投稿を終わらせるための入口。
 // 現在地から近い3件を出し、押した時点で記録する。
 // 「さっき聞いた分」は時刻を選んでから場所を押す。
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { C, dotStyle } from "@/lib/design";
 import { placeLineText, type Ranked } from "@/lib/view";
 
@@ -21,7 +21,7 @@ type Props = {
   locating: boolean;
   laterAt: LaterAt;
   onPickTime: (t: LaterAt) => void;
-  onPost: (placeId: string) => void;
+  onPost: (placeId: string, heard: boolean) => void;
   onPickOnMap: () => void;
   onClose: () => void;
 };
@@ -102,14 +102,27 @@ export default function QuickPostSheet({
 }: Props) {
   const pc = variant === "pc";
   const isLater = mode === "later";
+  // 「聞こえた」か「静かだった」か。あとから記録するほうは「聞こえた」専用なので、
+  // 切り替えチップは今この場で記録するときだけ出す
+  const [heard, setHeard] = useState(true);
+
+  const title = isLater
+    ? "あとから記録する"
+    : heard
+      ? "どこで聞こえましたか"
+      : "どの場所が静かでしたか";
 
   const lead = isLater
     ? "いつの分かを選んでから、場所を押してください。昼間に聞いた分も、あとから入れられます。"
     : locating
       ? "現在地を確認しています…"
-      : hasLocation
-        ? "現在地から近い順に出しています。押すとその場で記録されます。"
-        : "現在地が取れないため、おすすめ順で出しています。押すとその場で記録されます。";
+      : heard
+        ? hasLocation
+          ? "現在地から近い順に出しています。押すとその場で記録されます。"
+          : "現在地が取れないため、おすすめ順で出しています。押すとその場で記録されます。"
+        : hasLocation
+          ? "静かだったことも、次に探す人の役に立ちます。押すとその場で記録されます。"
+          : "静かだったことも、次に探す人の役に立ちます。現在地が取れないため、おすすめ順で出しています。";
 
   const listStyle: CSSProperties = {
     margin: pc ? "13px 0 0" : "14px 0 0",
@@ -157,7 +170,7 @@ export default function QuickPostSheet({
           <span
             style={{ fontSize: pc ? 15 : 16, fontWeight: 700, color: C.ink }}
           >
-            {isLater ? "あとから記録する" : "どこで聞こえましたか"}
+            {title}
           </span>
           <button
             onClick={onClose}
@@ -187,6 +200,17 @@ export default function QuickPostSheet({
         >
           {lead}
         </p>
+
+        {!isLater && (
+          <div style={{ display: "flex", gap: 7, marginTop: 13 }}>
+            <button onClick={() => setHeard(true)} style={chipStyle(heard, pc)}>
+              🌲 聞こえた
+            </button>
+            <button onClick={() => setHeard(false)} style={chipStyle(!heard, pc)}>
+              🌙 静かだった
+            </button>
+          </div>
+        )}
 
         {isLater && (
           <div
@@ -224,7 +248,7 @@ export default function QuickPostSheet({
             {near.map((n) => (
               <li key={n.p.id}>
                 <button
-                  onClick={() => onPost(n.p.id)}
+                  onClick={() => onPost(n.p.id, heard)}
                   style={{ ...rowBox(pc), cursor: "pointer" }}
                 >
                   <span style={dotStyle(n.s.freshness, 12)} />

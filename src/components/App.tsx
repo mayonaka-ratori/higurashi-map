@@ -335,12 +335,12 @@ export default function App() {
 
   // 押した時点で記録する。完了カードはその地点の詳細に出す
   const quickPost = useCallback(
-    (placeId: string) => {
+    (placeId: string, heard: boolean) => {
       const at = quick === "later" ? laterTime(laterAt, now, win) : undefined;
       setQuick(null);
       setQuery("");
       setSelectedId(placeId);
-      doPost({ heard: true, placeId, at, withComment: false });
+      doPost({ heard, placeId, at, withComment: false });
     },
     [quick, laterAt, now, win, doPost]
   );
