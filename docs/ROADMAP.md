@@ -34,6 +34,8 @@
       SQL Editor で [supabase/migrations/2026-08-09-created-at-from-app.sql](../supabase/migrations/2026-08-09-created-at-from-app.sql)
       を流すこと（`schema.sql` を丸ごと流すとテーブル作成でぶつかる）
 
+- [ ] **UI/UX改修（2026-08-18計画）** — 投稿の摩擦を減らす4つの小改修と、
+      未登録の場所へ投稿できる「自由報告ピン」。詳細は [UIUX-PLAN-2026-08.md](UIUX-PLAN-2026-08.md)
 - [ ] 実地でスポット座標を修正。机上の検算は2026-08-08に一巡した
       （OpenStreetMapと突き合わせて141箇所を修正。`node scripts/check-coords.mjs`）。
       渓谷・尾根道などOSMで照合できなかったものは概算のまま残っている
